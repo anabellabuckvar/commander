@@ -92,6 +92,12 @@ each finding with `file:line`, severity (blocker / major / minor) and the commit
 that fixed it, and last line `CLEAN`. CLEAN means the review ran to completion
 and no blocker or major is left unfixed. Do not run the review again for your fix
 commits or for later pushes: the one report is the proof.
+If this session cannot load `compound-engineering:ce-code-review`, that is a
+missing prerequisite, not a review result: post **Review prerequisite missing:
+compound-engineering:ce-code-review** with the setup command
+`claude plugin marketplace add EveryInc/compound-engineering-plugin && claude plugin install compound-engineering`,
+leave the step open and ask with `cmdr question ask` for setup and a restarted
+session. Never install it yourself.
 Report honestly: a provider/dispatch failure is execution=blocked,
 coverage=partial. It is never CLEAN and never evidence of a source defect. Post
 what blocked it without a verdict line, leave the step open and ask with `cmdr question ask`

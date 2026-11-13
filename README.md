@@ -73,6 +73,14 @@ macOS and Linux; a headless Linux machine can serve the web app.
    use (Codex or Claude), and sign in to that CLI. The installer checks other
    prerequisites and sets up Agent Mail, which is required for mail and adding
    projects.
+   Code-review steps also need the Compound Engineering plugin, which supplies
+   `compound-engineering:ce-code-review`. Install it before your first review:
+
+   ```bash
+   claude plugin marketplace add EveryInc/compound-engineering-plugin && claude plugin install compound-engineering
+   ```
+
+   The installer and `just doctor` warn if it is missing; they never install it.
 2. From this checkout, run:
 
    ```bash
