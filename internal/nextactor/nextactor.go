@@ -29,6 +29,7 @@ const (
 // Thresholds after which an owed move counts as stuck.
 const (
 	CommanderIdleStuck  = 10 * time.Minute // planning owed while Commander sits idle
+	CommanderBusyStuck  = 20 * time.Minute // a move owed while the Commander is busy with other work
 	NoProgressStuck     = 20 * time.Minute // an executing agent, idle, recording no progress
 	BusyNoProgressStuck = 60 * time.Minute // an executing agent mid-turn recording no progress
 	UnverifiedStuck     = 5 * time.Minute  // a claim with no live process evidence
@@ -323,7 +324,7 @@ func waits(b Bead, ctx Context) Result {
 		return Result{Actor: External, Reason: "wait:" + external.Kind, Who: waitWho(*external), Since: unix(external.Since), Text: "Waiting on " + waitWho(*external)}
 	}
 	if due != nil {
-		return commanderOwed(b, ctx, "wait_over", "act on "+quoted(due.Text()), unix(due.Since))
+		return commanderOwed(b, ctx, "wait_over", "act on "+quoted(due.Text()), max(unix(due.Since), unix(due.Until))) // owed from when the date came, not when it was set
 	}
 	return Result{}
 }
@@ -359,6 +360,8 @@ func blockers(b Bead, ctx Context, seen map[string]bool, depth int) (Result, boo
 
 // commanderOwed is a move the planning Commander owes: its own while it is in a
 // turn or within the grace after going idle, stuck once it sits idle longer.
+// Being in a turn does not mean it is doing this move (its one chat carries
+// every workstream), so an owed move left that long while it is busy is stuck too.
 func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result {
 	if b.PlanningUsage != "" && (reason == "plan" || reason == "wait_over") {
 		return Result{Actor: Stuck, Reason: "planning_usage", Text: b.PlanningUsage, Bead: b.ID}
@@ -369,6 +372,9 @@ func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result
 		busy, idleSince = ctx.Commander(who)
 	}
 	if busy {
+		if since > 0 && ctx.Now.Unix()-since > int64(CommanderBusyStuck/time.Second) {
+			return Result{Actor: Stuck, Reason: "commander_idle:" + reason, Who: who, Since: since, Text: fmt.Sprintf("Stuck: Commander has not got to %s in %s (busy with other work)", what, ago(ctx.Now.Unix()-since))}
+		}
 		return Result{Actor: Commander, Reason: reason, Who: who, Since: since, Text: "Commander: " + what}
 	}
 	waiting := max(since, idleSince)

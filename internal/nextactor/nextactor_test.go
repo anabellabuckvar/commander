@@ -33,7 +33,7 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 	ci := beads.Wait{Kind: beads.WaitCI, PR: 42, Since: now.Add(-3 * time.Minute)}
 	review := beads.Wait{Kind: beads.WaitReview, Ref: "alex"}
 	future := beads.Wait{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(time.Hour)}
-	past := beads.Wait{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}
+	past := beads.Wait{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Minute)}
 	handoff := beads.Wait{Kind: beads.WaitUntil, Ref: beads.ManagerPlanWait, Until: now.Add(time.Hour)}
 	cases := []struct {
 		name          string
@@ -67,12 +67,14 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"claim just made", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(time.Minute) }), false, 0, Agent, "starting", "Starting an agent"},
 		{"claim with no process", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(10 * time.Minute) }), false, 0, Stuck, "unverified", "Stuck: claimed"},
 		{"result to review, Commander busy", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), true, 0, Commander, "review_result", "Commander: review"},
+		{"result left unreviewed while Commander is busy elsewhere", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Hour) }), true, 0, Stuck, "commander_idle:review_result", "Stuck: Commander has not got to review the finished result in"},
 		{"result to review, Commander just idle", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), false, time.Minute, Commander, "review_result", "Commander to review"},
 		{"result unreviewed for long", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Hour) }), false, time.Hour, Stuck, "commander_idle:review_result", "Stuck: Commander"},
 		{"waiting on CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci} }), false, 0, External, "wait:ci", "Waiting on CI #42"},
 		{"waiting on a reviewer", open(func(b *Bead) { b.Waits = []beads.Wait{review} }), false, 0, External, "wait:review", "Waiting on review by alex"},
 		{"waiting for a date", open(func(b *Bead) { b.Waits = []beads.Wait{future} }), false, 0, External, "wait:until", "Waiting on rollout window"},
 		{"a date that passed is owed", open(func(b *Bead) { b.Waits = []beads.Wait{past} }), true, 0, Commander, "wait_over", "Commander: act on"},
+		{"a date long passed, Commander busy elsewhere", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}} }), true, 0, Stuck, "commander_idle:wait_over", "Stuck: Commander has not got to act on"},
 		{"legacy Manager handoff is Commander's", open(func(b *Bead) { b.Waits = []beads.Wait{handoff} }), true, 0, Commander, "wait_over", "Commander: act on"},
 		{"user wait beats CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci, {Kind: beads.WaitUser}}; b.UserAsk = "approve" }), false, 0, User, "waiting_user", "Needs you"},
 		{"queued for capacity", open(func(b *Bead) { b.ReadyQueued = true }), false, 0, Agent, "queued", "Queued"},
