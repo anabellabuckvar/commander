@@ -32,6 +32,7 @@ const (
 	CommanderBusyStuck  = 20 * time.Minute // a move owed while the Commander is busy with other work
 	NoProgressStuck     = 20 * time.Minute // an executing agent, idle, recording no progress
 	BusyNoProgressStuck = 60 * time.Minute // an executing agent mid-turn recording no progress
+	LoopStuck           = 3 * time.Hour    // an agent active all along that has recorded nothing (looping)
 	UnverifiedStuck     = 5 * time.Minute  // a claim with no live process evidence
 	CutoverStuck        = 15 * time.Minute // an agent asked to stop that is still running (cmdrd stops it at 10)
 	maxChainDepth       = 32
@@ -64,6 +65,7 @@ type Bead struct {
 	ExecWorking         bool   // and is in a turn right now (not idle)
 	ExecRole            string // that agent
 	ExecSince           int64
+	ExecActiveAt        int64 // its agent's last hook or tool event (0 = unknown)
 	ProgressAt          int64 // last recorded progress on the bead
 	Unverified          bool  // a claim with no positive process evidence yet
 	UnverifiedSince     int64
@@ -311,7 +313,16 @@ func own(b Bead, ctx Context) Result {
 		if b.ExecWorking {
 			limit = BusyNoProgressStuck // a long build or test run is still a turn in progress
 		}
-		if since > 0 && now-since > int64(limit/time.Second) {
+		if b.ExecActiveAt > 0 {
+			// The agent's own events say whether it is working: quiet for the
+			// idle limit is stuck; active but recording nothing for hours is a loop.
+			if now-b.ExecActiveAt > int64(NoProgressStuck/time.Second) {
+				return Result{Actor: Stuck, Reason: "no_progress", Who: b.ExecRole, Since: b.ExecActiveAt, Text: fmt.Sprintf("Stuck: the agent has done nothing for %s", ago(now-b.ExecActiveAt))}
+			}
+			if since > 0 && now-since > int64(LoopStuck/time.Second) {
+				return Result{Actor: Stuck, Reason: "looping", Who: b.ExecRole, Since: since, Text: fmt.Sprintf("Stuck: the agent is busy but has recorded no progress for %s", ago(now-since))}
+			}
+		} else if since > 0 && now-since > int64(limit/time.Second) {
 			return Result{Actor: Stuck, Reason: "no_progress", Who: b.ExecRole, Since: since, Text: fmt.Sprintf("Stuck: no progress for %s", ago(now-since))}
 		}
 		text := "Working on " + quoted(b.Title)

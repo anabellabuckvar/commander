@@ -72,15 +72,16 @@ type ObservedExecution struct {
 	Role, SessionID, BeadID, State, Detail string
 	Known, Alive                           bool
 	Since                                  int64
+	ActiveAt                               int64 // last hook or tool event from its agent (agent_state.updated)
 	Path                                   []string
 	Runtime                                string // claude or codex ("" before it was recorded)
 }
 
 const observedExecutionSQL = `SELECT r.id,r.project_id,r.agent_name,r.opencode_session_id,r.task_bead_id,
- COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),b.project_id,b.id,b.execution_attempts,b.execution_error,COALESCE(r.execution_runtime,'')
+ COALESCE(o.checked_at,0)>=?,COALESCE(o.alive,FALSE),COALESCE(a.state,'unknown'),COALESCE(a.detail,''),COALESCE(a.since,0),COALESCE(a.updated,0),b.project_id,b.id,b.execution_attempts,b.execution_error,COALESCE(r.execution_runtime,'')
  FROM agent_runs r JOIN bead_tasks b ON b.active_run_id=r.id
  LEFT JOIN run_observations o ON o.run_id=r.id
- LEFT JOIN LATERAL(SELECT state,detail,since FROM agent_state a WHERE replace(a.role,'.','-')=replace(r.agent_name,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
+ LEFT JOIN LATERAL(SELECT state,detail,since,updated FROM agent_state a WHERE replace(a.role,'.','-')=replace(r.agent_name,'.','-') ORDER BY updated DESC LIMIT 1)a ON TRUE
  WHERE r.status='running' AND b.deleted_at IS NULL ORDER BY r.id`
 
 // ObservedExecutions reads current identities and the compact parent graph in
@@ -101,7 +102,7 @@ func (s *Store) ObservedExecutions(ctx context.Context) ([]ObservedExecution, er
 		var x ObservedExecution
 		var pid int64
 		var bead string
-		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &pid, &bead, &x.StartupAttempts, &x.StartupError, &x.Runtime); e != nil {
+		if e = rows.Scan(&x.RunID, &x.ProjectID, &x.Role, &x.SessionID, &x.BeadID, &x.Known, &x.Alive, &x.State, &x.Detail, &x.Since, &x.ActiveAt, &pid, &bead, &x.StartupAttempts, &x.StartupError, &x.Runtime); e != nil {
 			rows.Close()
 			return nil, e
 		}

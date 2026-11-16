@@ -176,6 +176,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 		if run.ProjectID == pid && run.BeadID == s.BeadID {
 			n.Executing, n.ExecRole, n.ExecWorking = true, run.Role, run.State == store.AgentWorking
 			n.RunRuntime = run.Runtime
+			n.ExecActiveAt = run.ActiveAt
 			break
 		}
 	}

@@ -405,3 +405,32 @@ func TestRunOutcomeWithAPlannedFollowUpWaitsOnIt(t *testing.T) {
 		t.Fatalf("result with no follow-up = %s, want review_result", got.Reason)
 	}
 }
+
+// Track 3.2 on Nov 16: its agent fixed review findings and watched CI for over
+// an hour (tool calls every few minutes) without writing a progress note, and
+// the row read "Stuck: no progress for 1 hour". The agent's own events decide.
+func TestAnActiveAgentIsWorkingWhateverTheProgressClock(t *testing.T) {
+	ago := func(d time.Duration) int64 { return now.Add(-d).Unix() }
+	run := func(f func(*Bead)) Result {
+		b := Bead{ID: "b", Title: "Build Grafana alerting", Status: "open", PlanningCommander: "commander",
+			Executing: true, ExecWorking: true, ExecRole: "operator-x", ExecSince: ago(80 * time.Minute), ProgressAt: ago(80 * time.Minute)}
+		f(&b)
+		return Decide(b, ctxWith(true, 0, nil))
+	}
+	if r := run(func(b *Bead) { b.ExecActiveAt = ago(30 * time.Second) }); r.Actor != Agent || r.Reason != "executing" {
+		t.Fatalf("active agent = %s/%s %q, want working", r.Actor, r.Reason, r.Text)
+	}
+	if r := run(func(b *Bead) { b.ExecActiveAt = ago(25 * time.Minute) }); r.Actor != Stuck || !strings.Contains(r.Text, "done nothing for") {
+		t.Fatalf("quiet agent = %s %q, want stuck naming its idle time", r.Actor, r.Text)
+	}
+	if r := run(func(b *Bead) {
+		b.ExecActiveAt = ago(time.Minute)
+		b.ExecSince, b.ProgressAt = ago(4*time.Hour), ago(4*time.Hour)
+	}); r.Actor != Stuck || r.Reason != "looping" {
+		t.Fatalf("busy 4h with no progress = %s/%s, want looping", r.Actor, r.Reason)
+	}
+	// Unknown activity keeps the old progress-clock rule.
+	if r := run(func(b *Bead) {}); r.Actor != Stuck || r.Reason != "no_progress" {
+		t.Fatalf("no activity clock, 80 min = %s/%s, want no_progress", r.Actor, r.Reason)
+	}
+}

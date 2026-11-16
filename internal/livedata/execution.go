@@ -21,7 +21,8 @@ type SnapExecution struct {
 	TaskBeadID      string `json:"task_bead_id,omitempty"`
 	RunID           int64  `json:"run_id,omitempty"`
 	SessionID       string `json:"session_id,omitempty"`
-	Runtime         string `json:"runtime,omitempty"` // claude or codex
+	Runtime         string `json:"runtime,omitempty"`   // claude or codex
+	ActiveAt        int64  `json:"active_at,omitempty"` // its agent's last hook or tool event
 }
 
 func executionOf(s Snapshot, data Data, chats map[string]ChatState) []SnapExecution {
