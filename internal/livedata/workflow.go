@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"github.com/example-user/commander/internal/beads"
 	"slices"
 	"strconv"
 	"strings"
@@ -314,6 +315,14 @@ func (f flow) current(ws SnapWorkstream) string {
 	}
 	for s := range stepValues(ws.Steps) {
 		if !stepClosed(s) && !parked(s) && !s.Superseded && !f.container(s) && (s.State == "in-progress" || (s.Status == "in_progress" && !s.Gate) || liveTask(s) || (strings.HasPrefix(s.Owner, "operator-") && stepAlive(s))) {
+			return s.BeadID
+		}
+	}
+	// Nothing running: the work is on the step waiting for its recorded time
+	// or event (a scheduled measurement, a CI run), not on a gate after it.
+	for s := range stepValues(ws.Steps) {
+		if !stepClosed(s) && !parked(s) && !s.Superseded && !s.Gate && !f.container(s) && !unfinishedBlocker(s, f.byID) && !f.blockedAbove(s) &&
+			slices.ContainsFunc(s.TypedWaits, func(w beads.Wait) bool { return w.Kind != beads.WaitUser }) {
 			return s.BeadID
 		}
 	}

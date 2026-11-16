@@ -90,3 +90,26 @@ func TestDiagramNow_FlaggedStepBehindGateWaitsOnIt(t *testing.T) {
 		t.Errorf("w.10 = %+v, want waiting on the gate", s)
 	}
 }
+
+// A scheduled measurement is where the work is while nothing runs: not blank,
+// and not a sign-off drawn after it (even one the plan forgot to chain to it).
+func TestDiagramNow_WaitingMeasurementIsCurrent(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	for _, chained := range []bool{true, false} {
+		gate := ObjectiveRow{BeadID: "w.2", ParentBeadID: "w", Title: "Greenlight shipping", ProjectID: 1, State: beads.StateNotStarted, Gate: true, Approvers: []string{"user"}}
+		if chained {
+			gate.BlockedBy = []string{"w.1"}
+		}
+		rows := []ObjectiveRow{
+			{BeadID: "w", Title: "Chart edits", ProjectID: 1, CreatedAt: "1"},
+			{BeadID: "w.1", ParentBeadID: "w", Title: "Measure saves at today's peak", ProjectID: 1, State: beads.StateNotStarted,
+				Waits: []beads.Wait{{Kind: beads.WaitUntil, Ref: "peak", Until: now.Add(time.Hour), Since: now}}},
+			gate,
+		}
+		snap := BuildSnapshot(Data{Projects: []store.Project{{ID: 1, Name: "p1"}}, Objectives: rows, LoadedAt: now}, nil)
+		d := Board(snap, now.Unix())
+		if dg := d.Workstreams[0].Diagram; dg == nil || dg.Current != "w.1" {
+			t.Errorf("chained=%v: current = %+v, want the waiting measurement w.1", chained, dg)
+		}
+	}
+}
