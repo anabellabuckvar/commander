@@ -11,7 +11,8 @@
 //	long         a slow stream of text deltas (interrupt it)
 //	deaf long    the same, but control interrupts are ignored (only SIGINT works)
 //	task         a sub-agent: task_started, nested text, task_notification
-//	compact      a compact_boundary
+//	compact      a compacting status, then a compact_boundary (also /compact)
+//	fullctx      a two-call turn whose last call fills 80% of a 1000-token window
 //	ratelimit    a rate_limit_event (allowed, five_hour 50%, seven_day 20%)
 //	usagelimit   the CLI at a usage limit: a rejected rate_limit_event, the
 //	             synthetic assistant error message, and an error result
@@ -271,19 +272,31 @@ func (f *fake) turn(text string) int {
 		f.emit(map[string]any{"type": "system", "subtype": "task_notification", "task_id": "t1", "tool_use_id": "toolu_task", "status": "completed", "summary": "done"})
 		f.textBlock("", "task finished", 0, false)
 	case strings.Contains(text, "compact"):
+		f.emit(map[string]any{"type": "system", "subtype": "status", "status": "compacting"})
+		f.emit(map[string]any{"type": "system", "subtype": "status", "status": nil})
 		f.emit(map[string]any{"type": "system", "subtype": "compact_boundary", "compact_metadata": map[string]any{"trigger": "manual", "pre_tokens": 1000, "post_tokens": 100}})
 		f.textBlock("", "compacted", 0, false)
 	case strings.Contains(text, "ratelimit"):
 		f.emit(map[string]any{"type": "rate_limit_event", "rate_limit_info": map[string]any{"status": "allowed", "rateLimitType": "five_hour", "utilization": 0.5,
 			"unifiedWindows": map[string]any{"five_hour": map[string]any{"utilization": 0.5, "resetsAt": 4102444800}, "seven_day": map[string]any{"utilization": 0.2, "resetsAt": 4102444800}}}})
 		f.textBlock("", "ok", 0, false)
+	case strings.Contains(text, "fullctx"):
+		f.textBlock("", "ok", 0, false)
 	default:
 		f.textBlock("", "echo: "+text, 0, false)
 	}
 	f.cost += 0.01
 	f.persist(text)
-	f.emit(map[string]any{"type": "result", "subtype": result, "is_error": result != "success", "terminal_reason": reason,
-		"total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5, "usage": map[string]any{"input_tokens": 3, "output_tokens": 7}})
+	res := map[string]any{"type": "result", "subtype": result, "is_error": result != "success", "terminal_reason": reason,
+		"total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5, "usage": map[string]any{"input_tokens": 3, "output_tokens": 7}}
+	if strings.Contains(text, "fullctx") {
+		// 800 of a 1000-token window: the last call's prompt is what fills it.
+		res["num_turns"] = 2
+		res["usage"] = map[string]any{"input_tokens": 6, "cache_read_input_tokens": 1500, "output_tokens": 9,
+			"iterations": []any{map[string]any{"input_tokens": 3, "cache_read_input_tokens": 700}, map[string]any{"input_tokens": 3, "cache_read_input_tokens": 797}}}
+		res["modelUsage"] = map[string]any{"claude-fake-1": map[string]any{"contextWindow": 1000}}
+	}
+	f.emit(res)
 	return -1
 }
 

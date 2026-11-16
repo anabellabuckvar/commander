@@ -73,7 +73,7 @@ export type ChatEvent = Base &
     | { kind: 'compact'; trigger?: string; preTokens?: number; postTokens?: number }
     | { kind: 'context'; tokens: number; window?: number }
     | { kind: 'rate_limit'; status: string; windows: Record<string, RateWindow> }
-    | { kind: 'turn_result'; subtype: string; isError: boolean; durationMs?: number; numTurns?: number; costUsd?: number; usage?: Usage; contextWindow?: number; terminalReason?: string; localCommand?: string; denials?: number }
+    | { kind: 'turn_result'; subtype: string; isError: boolean; durationMs?: number; numTurns?: number; costUsd?: number; usage?: Usage; contextWindow?: number; contextTokens?: number; terminalReason?: string; localCommand?: string; denials?: number }
     | { kind: 'notice'; level: 'info' | 'warn' | 'error'; text: string; key?: string }
     | { kind: 'api_retry'; attempt: number; maxRetries?: number; delayMs?: number; error?: string }
     | { kind: 'interrupted' }
@@ -202,6 +202,7 @@ export interface ChatState {
   phase: 'idle' | 'requesting' | 'compacting'
   turnOpen: boolean
   turnStartTs?: number
+  turnQuiet?: boolean // the open turn has shown nothing yet (a long silence near a full context is a compaction)
   queue: string[] // queued user item ids
   readsPrompts?: boolean // the runtime reports each message it reads (prompt_read); Codex does not
   pendingRequests: string[] // unresolved permission/question/plan item ids
@@ -327,8 +328,12 @@ function startTurn(d: Draft, ts?: number) {
   if (!d.turnOpen) {
     d.turnOpen = true
     d.turnStartTs = ts
+    d.turnQuiet = true
   }
 }
+
+// What the agent shows of a turn: after any of it, a quiet turn is no compaction.
+const OUTPUT = new Set<string>(['text_delta', 'text_final', 'thinking', 'tool_start', 'tool_input', 'tool_result', 'permission_request', 'question', 'plan'])
 
 // Real output (or the end of the turn) means the API retries are over.
 const ENDS_RETRY = new Set<string>(['text_delta', 'text_final', 'thinking', 'tool_start', 'tool_input', 'tool_result', 'turn_result', 'interrupted', 'error', 'exit'])
@@ -340,6 +345,7 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
     if (e.session) d.session = e.session
   }
   if (d.apiRetry && ENDS_RETRY.has(e.kind)) d.apiRetry = undefined
+  if (OUTPUT.has(e.kind)) d.turnQuiet = false
   switch (e.kind) {
     case 'local_reset':
       Object.assign(d, initialState(d.session))
@@ -519,7 +525,8 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
     case 'compact':
       d.compactions++
       if (e.postTokens) d.contextTokens = e.postTokens
-      sys(d, e, 'compact', 'Context compacted', e.preTokens && e.postTokens ? `${fmtTokens(e.preTokens)} → ${fmtTokens(e.postTokens)} tokens (${e.trigger ?? 'auto'})` : e.trigger)
+      if (d.phase === 'compacting') d.phase = 'idle'
+      sys(d, e, 'compact', e.trigger === 'auto' ? 'Memory compacted (it was full)' : 'Memory compacted', compactDetail(e.preTokens, e.postTokens, d.contextWindow))
       return
     case 'context':
       if (!e.parent) {
@@ -541,6 +548,7 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
         d.usage.cacheCreate += e.usage.cacheCreate
       }
       if (e.contextWindow) d.contextWindow = e.contextWindow
+      if (e.contextTokens) d.contextTokens = e.contextTokens
       // Tools still running when the turn ends were cut off.
       for (const id of d.runningTools) patch<ToolItem>(d, id, (it) => ({ status: it.status === 'input' || it.status === 'running' ? 'interrupted' : it.status }))
       d.runningTools = []
@@ -586,9 +594,16 @@ function apply(d: Draft, e: ChatEvent | LocalAction): void {
       }
       return
     }
-    case 'notice':
+    case 'notice': {
+      // cmdrd's word on its early compaction names the divider the boundary drew.
+      const divider = e.key === 'early_compact' ? [...d.order].reverse().map((id) => d.items[id]).find((it) => it?.type === 'system' && it.variant === 'compact') : undefined
+      if (divider && e.text.startsWith('Compacted')) {
+        patch<SystemItem>(d, divider.id, () => ({ text: 'Memory compacted early' }))
+        return
+      }
       sys(d, e, e.level === 'error' ? 'error' : e.level === 'warn' ? 'warn' : 'notice', e.text)
       return
+    }
     case 'error':
       d.lastError = e.message
       sys(d, e, 'error', e.message)
@@ -656,7 +671,7 @@ export function deriveStatus(s: ChatState): DerivedStatus {
     const what = it.type === 'question' ? 'question' : it.type === 'plan' ? 'plan approval' : `approval: ${it.tool}`
     return { state: 'waiting', label: 'Needs you', detail: what, subAgents }
   }
-  if (s.phase === 'compacting') return { state: 'compacting', label: 'Compacting', subAgents }
+  if (compactingNow(s)) return { state: 'compacting', label: 'Compacting its memory', detail: 'about a minute', subAgents }
   if (s.turnOpen || s.phase === 'requesting') {
     const tool = s.runningTools.map((id) => s.items[id]).find((it): it is ToolItem => it?.type === 'tool' && !it.parent)
     if (tool && (tool.name === 'Task' || tool.name === 'Agent')) return { state: 'working', label: 'Working', detail: `sub-agent: ${toolHeadline(tool.name, tool.input)}`, subAgents }
@@ -666,6 +681,24 @@ export function deriveStatus(s: ChatState): DerivedStatus {
   }
   if (subAgents) return { state: 'working', label: 'Background', detail: `${subAgents} sub-agent${subAgents > 1 ? 's' : ''} running`, subAgents }
   return { state: 'idle', label: 'Idle', subAgents }
+}
+
+// contextShare is how full the agent's context is (0-1), when known.
+export function contextShare(s: Pick<ChatState, 'contextTokens' | 'contextWindow'>): number | undefined {
+  return s.contextTokens != null && s.contextWindow ? s.contextTokens / s.contextWindow : undefined
+}
+
+// compactingNow: the CLI says it is compacting, or a turn near a full context
+// has shown nothing yet (Claude compacts before it answers, and says nothing).
+export function compactingNow(s: ChatState): boolean {
+  if (s.phase === 'compacting') return true
+  return s.turnOpen && !!s.turnQuiet && (contextShare(s) ?? 0) >= 0.9
+}
+
+function compactDetail(pre?: number, post?: number, window?: number): string | undefined {
+  if (!pre || !post) return undefined
+  const tokens = `${fmtTokens(pre)} → ${fmtTokens(post)} tokens`
+  return window ? `was ${Math.round((pre / window) * 100)}% full, now ${Math.round((post / window) * 100)}% · ${tokens}` : tokens
 }
 
 // ---- shared formatting ------------------------------------------------------

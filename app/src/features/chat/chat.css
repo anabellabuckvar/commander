@@ -2402,3 +2402,8 @@ button.cc-mail-subject:hover {
   line-height: 1.55;
   white-space: pre-wrap;
 }
+
+/* How full the agent's working memory is: quiet until it matters. */
+.cc-memory { font-size: 11px; color: var(--cc-muted, #888); margin-right: 6px; white-space: nowrap; }
+.cc-memory-warn { color: var(--attn, #b8860b); }
+.cc-memory-crit { color: var(--peach, #d9822b); font-weight: 600; }

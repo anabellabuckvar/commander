@@ -6,6 +6,8 @@ import { useChat } from './useChat'
 import { Header, type MenuItem } from './Header'
 import { Thread } from './thread/Thread'
 import { ApiRetryRow } from './thread/ApiRetryRow'
+import { CompactingRow } from './thread/CompactingRow'
+import { compactingNow } from './events'
 import { toThread } from './thread/toThread'
 import { Composer } from './Composer'
 import { ActionsContext, ItemsContext, type ChatActions } from './context'
@@ -78,6 +80,14 @@ export function ChatPane({ role, transport, title, readonly, menu, costUsd, cost
 
   const offline = useOffline(conn, terminal)
 
+  // Stopping a compaction throws it away: the first Stop asks, the second stops.
+  const compacting = running && compactingNow(state)
+  const [confirmStop, setConfirmStop] = useState(false)
+  useEffect(() => {
+    if (!compacting) setConfirmStop(false)
+  }, [compacting])
+  const stop = () => (compacting && !confirmStop ? setConfirmStop(true) : void interrupt())
+
   const messages = useMemo(() => toThread(state, running), [state, running])
   // assistant-ui renders the thread from Commander's own state; sending, stop
   // and queueing stay with Commander's composer (slash commands, images, Mod+Enter).
@@ -86,7 +96,7 @@ export function ChatPane({ role, transport, title, readonly, menu, costUsd, cost
     convertMessage: (m) => m,
     isRunning: running,
     onNew: async () => {},
-    onCancel: async () => void interrupt(),
+    onCancel: async () => stop(),
   })
 
   const { stageRef, floatsRef } = useFloatsHeight()
@@ -108,6 +118,16 @@ export function ChatPane({ role, transport, title, readonly, menu, costUsd, cost
                         <span>Sending…</span>
                       </div>
                     </div>
+                  ) : compacting ? (
+                    <CompactingRow
+                      since={state.turnStartTs}
+                      confirming={confirmStop}
+                      onStop={() => {
+                        setConfirmStop(false)
+                        void interrupt()
+                      }}
+                      onKeep={() => setConfirmStop(false)}
+                    />
                   ) : running && state.apiRetry ? (
                     <ApiRetryRow retry={state.apiRetry} />
                   ) : !running && host.Watching ? (
@@ -143,7 +163,7 @@ export function ChatPane({ role, transport, title, readonly, menu, costUsd, cost
             commands={state.commands.length ? state.commands : FALLBACK_COMMANDS}
             readonly={readonly}
             onSend={(text, opts) => void send(text, opts)}
-            onStop={() => void interrupt()}
+            onStop={stop}
             placeholder={terminal ? `Message ${title ?? role}… (delivered by mail to its terminal)` : undefined}
             aside={host.MailChip && <host.MailChip role={role} />}
             capture={host.capture?.usePreview(role) ?? null}

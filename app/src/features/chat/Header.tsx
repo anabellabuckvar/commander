@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { fmtCost, fmtTokens, type ChatState } from './events'
+import { contextShare, fmtCost, fmtTokens, type ChatState } from './events'
 import type { TerminalSession } from './ChatPane'
 import { Icon } from './icons'
 import { modelName } from './modelName'
@@ -76,8 +76,17 @@ export function Header({
   const items = extraMenu ?? []
   const model = modelName(state.model)
 
+  const share = contextShare(state)
   const controls = (
     <div className="cc-header">
+      {share != null && (
+        <span
+          className={`cc-memory${share >= 0.9 ? ' cc-memory-crit' : share >= 0.75 ? ' cc-memory-warn' : ''}`}
+          title="How full its working memory is. Past 75% a Commander or Manager compacts it while idle; full, it compacts before its next reply (about a minute)."
+        >
+          Memory {Math.round(Math.min(1, share) * 100)}%
+        </span>
+      )}
       {terminal && (
         <>
           <span className="cc-badge cc-badge-terminal" title={terminal.title}>

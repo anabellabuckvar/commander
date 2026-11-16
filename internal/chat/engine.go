@@ -61,6 +61,11 @@ type Options struct {
 	// call must still pass Confirm.
 	Tmux          TmuxRunner
 	AllowHandover bool
+	// EarlyCompactAt is the share of its context window past which an idle
+	// Commander or Manager chat compacts (compact.go); 0 = 0.75, negative = off.
+	EarlyCompactAt float64
+	// EarlyCompactDelay is how long it must be idle first; default 45s.
+	EarlyCompactDelay time.Duration
 	// InterruptGrace is how long Interrupt waits for the CLI's ack before
 	// falling back to SIGINT; default 3s.
 	InterruptGrace time.Duration
@@ -197,6 +202,12 @@ type chatRole struct {
 	// limit is the usage limit the last turn stopped at (Status.UsageLimit);
 	// turnLimit is one seen in the current turn, decided at its result.
 	limit, turnLimit *UsageLimit
+	// Context fullness after the last turn and the early compaction (compact.go).
+	ctxUsed, ctxWindow int
+	compactPending     bool // an early /compact is out
+	compactPct         int  // how full it was when that went out
+	compactRetryAt     time.Time
+	compactTimer       *time.Timer
 }
 
 // process is one running claude.
@@ -1039,6 +1050,7 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 	for _, ev := range events {
 		if ev.Kind == KindCompaction {
 			boardturn.MarkFull(e.opts.Home, c.role)
+			e.compacted(c, p, ev)
 		}
 		if ev.Kind == KindRateLimit {
 			e.opts.Usage.Record(p.runtime(), p.spec.Account, c.role, ev.RateLimit, e.opts.Now())
@@ -1047,6 +1059,7 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 		if ev.Kind == KindResult {
 			e.afterResult(c, p)
 			e.settleLimit(c, p, ev)
+			e.noteContext(c, p, ev)
 		}
 	}
 }

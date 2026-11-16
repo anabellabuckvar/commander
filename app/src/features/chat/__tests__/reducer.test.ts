@@ -170,7 +170,8 @@ describe('synthetic stream s4 (/context, /compact, /cost)', () => {
 
   it('adds a compaction marker with token counts', () => {
     const c = of(s, 'system').find((x) => x.variant === 'compact') as SystemItem
-    expect(c.detail).toBe('40k → 14k tokens (manual)')
+    expect(c.text).toBe('Memory compacted') // a /compact the user ran: not early, not full
+    expect(c.detail).toMatch(/^(was \d+% full, now \d+% · )?40k → 14k tokens$/)
     expect(s.compactions).toBe(1)
     expect(s.contextTokens).toBeGreaterThan(0)
   })

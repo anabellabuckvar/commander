@@ -175,8 +175,9 @@ export class EngineMapper {
         // The terminal UI's label for a Stop hook that blocked (how mail arrives), not a failure.
         if (/^Stop hook error occurred/.test(String(f.text ?? ''))) return null
         if (!f.text) return null
-        return { kind: 'notice', level: f.subtype === 'interrupt_fallback' ? 'warn' : 'info', text: String(f.text) }
+        return { kind: 'notice', level: f.subtype === 'interrupt_fallback' ? 'warn' : 'info', text: String(f.text), key: f.subtype === 'early_compact' ? 'early_compact' : undefined }
       case 'agent_state':
+        if (f.state?.state === 'working' && f.state?.detail === COMPACTING_DETAIL) return { kind: 'status', state: 'compacting' }
         return f.state?.state === 'idle' ? { kind: 'agent_idle' } : null
       case 'turn_result': {
         const r: Raw = f.result ?? {}
@@ -193,6 +194,7 @@ export class EngineMapper {
           costUsd: r.total_cost_usd,
           usage: { input: u.input_tokens ?? 0, output: u.output_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheCreate: u.cache_creation_input_tokens ?? 0 },
           contextWindow: windows.length ? Math.max(...windows) : undefined,
+          contextTokens: contextTokens(u, r.num_turns),
           terminalReason: r.terminal_reason,
           denials: Array.isArray(r.permission_denials) ? r.permission_denials.length : undefined,
         }
@@ -241,4 +243,17 @@ function hookReason(output: string): string {
     }
   }
   return output
+}
+
+// cmdrd's agent-state detail while the CLI compacts (chat.CompactingDetail).
+export const COMPACTING_DETAIL = 'Compacting its memory'
+
+// contextTokens is how full the context was at the end of a turn: the last API
+// call's prompt. The top-level usage sums every call, so it only stands for the
+// context when the turn made one call.
+export function contextTokens(u: Raw, numTurns?: number): number | undefined {
+  const it: Raw[] = Array.isArray(u?.iterations) ? u.iterations : []
+  const one = (x: Raw) => (x?.input_tokens ?? 0) + (x?.cache_read_input_tokens ?? 0) + (x?.cache_creation_input_tokens ?? 0)
+  const n = it.length ? one(it[it.length - 1]) : (numTurns ?? 1) <= 1 ? one(u) : 0
+  return n > 0 ? n : undefined
 }

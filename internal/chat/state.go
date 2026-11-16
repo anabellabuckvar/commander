@@ -9,17 +9,22 @@ import (
 	"github.com/example-user/commander/internal/store"
 )
 
+// CompactingDetail is the agent state's detail while the CLI compacts its
+// context; the app shows its compacting status from it.
+const CompactingDetail = "Compacting its memory"
+
 // stateTracker derives the agent state (the agent_state table's vocabulary)
 // purely from the event stream of one role.
 type stateTracker struct {
-	running bool // a process is up
-	turn    bool // a turn is in flight
-	crashed string
-	tool    string            // detail of the tool running now
-	pending map[string]string // request id -> tool name
-	order   []string          // pending ids in arrival order
-	tasks   map[string]string // running background tasks: their descriptions
-	taskIDs []string          // and the order they started in
+	running    bool // a process is up
+	turn       bool // a turn is in flight
+	compacting bool // the CLI is compacting the context (status "compacting")
+	crashed    string
+	tool       string            // detail of the tool running now
+	pending    map[string]string // request id -> tool name
+	order      []string          // pending ids in arrival order
+	tasks      map[string]string // running background tasks: their descriptions
+	taskIDs    []string          // and the order they started in
 }
 
 func newStateTracker() *stateTracker {
@@ -39,9 +44,12 @@ func (t *stateTracker) observe(e Event) {
 			t.turn = true
 		}
 	case KindStatus:
-		if e.Status == "requesting" || e.Status == "thinking" {
+		if e.Status == "requesting" || e.Status == "thinking" || e.Status == "compacting" {
 			t.turn = true
 		}
+		t.compacting = e.Status == "compacting"
+	case KindCompaction:
+		t.compacting = false
 	case KindToolInput:
 		if e.ParentToolUseID == "" && e.Tool != nil {
 			t.tool = toolDetail(e.Tool.Name, e.Tool.Input)
@@ -78,7 +86,7 @@ func (t *stateTracker) observe(e Event) {
 			t.taskIDs = slices.DeleteFunc(t.taskIDs, func(x string) bool { return x == id })
 		}
 	case KindResult:
-		t.turn, t.tool = false, ""
+		t.turn, t.tool, t.compacting = false, "", false
 		t.pending, t.order = map[string]string{}, nil
 	case KindExit:
 		if t.turn && e.Exit != nil && !e.Exit.Expected {
@@ -87,7 +95,7 @@ func (t *stateTracker) observe(e Event) {
 				t.crashed = "process killed mid-turn (" + e.Exit.Signal + ")"
 			}
 		}
-		t.running, t.turn, t.tool = false, false, ""
+		t.running, t.turn, t.tool, t.compacting = false, false, "", false
 		t.pending, t.order, t.tasks, t.taskIDs = map[string]string{}, nil, map[string]string{}, nil
 	}
 }
@@ -124,6 +132,8 @@ func (t *stateTracker) state() State {
 			return State{State: store.AgentWaiting, Detail: "needs you: plan"}
 		}
 		return State{State: store.AgentWaiting, Detail: "needs you: approve " + name}
+	case t.compacting:
+		return State{State: store.AgentWorking, Detail: CompactingDetail}
 	case t.turn:
 		return State{State: store.AgentWorking, Detail: t.tool}
 	case len(t.tasks) > 0:
