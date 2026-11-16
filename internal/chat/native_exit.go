@@ -24,6 +24,17 @@ type nativeExitReceipt struct {
 	ObservedAt int64       `json:"observed_at"`
 }
 
+// cause is the host-observed reason a native execution ended ("" when clean).
+func (r nativeExitReceipt) cause() string {
+	switch {
+	case r.Signal != "":
+		return "signal " + r.Signal
+	case r.Code != 0:
+		return fmt.Sprintf("exit code %d", r.Code)
+	}
+	return ""
+}
+
 func nativeExitPath(home, role string, rid int64) string {
 	return filepath.Join(home, "chat", "native-exits", fmt.Sprintf("%s.%d.json", role, rid))
 }
@@ -299,7 +310,11 @@ func (e *Engine) flushNativeExits(ctx context.Context, role string) error {
 			u := receipt.Limit
 			e.opts.Usage.MarkOut(u.Runtime, u.Account, receipt.Role, u.ResetsAt, u.At)
 		}
-		if reports, ok := e.opts.States.(interface {
+		if exits, ok := e.opts.States.(interface {
+			FinishNativeExecutionExit(context.Context, string, int64, string, string, string, string) error
+		}); ok {
+			err = exits.FinishNativeExecutionExit(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary, receipt.cause())
+		} else if reports, ok := e.opts.States.(interface {
 			FinishNativeExecutionReport(context.Context, string, int64, string, string, string) error
 		}); ok {
 			err = reports.FinishNativeExecutionReport(ctx, receipt.Role, receipt.RunID, receipt.SessionID, receipt.Status, receipt.Summary)

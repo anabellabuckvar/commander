@@ -12,7 +12,7 @@ import (
 // closeSupervisedRun closes execution and transfers the next move in one
 // transaction. Lock order is bead, then run, matching claims and state hooks.
 func (s *Store) closeSupervisedRun(ctx context.Context, rid int64, status string) error {
-	return s.closeSupervisedRunIdentity(ctx, rid, status, "", "", "")
+	return s.closeSupervisedRunIdentity(ctx, rid, status, "", "", "", "")
 }
 
 // FinishNativeExecution consumes a host-observed exit, never a model's claim
@@ -24,19 +24,26 @@ func (s *Store) FinishNativeExecution(ctx context.Context, role string, rid int6
 // FinishNativeExecutionReport records a physical exit and its unaccepted model
 // report atomically. It never closes work or substitutes for review/approval.
 func (s *Store) FinishNativeExecutionReport(ctx context.Context, role string, rid int64, session, status, report string) error {
+	return s.FinishNativeExecutionExit(ctx, role, rid, session, status, report, "")
+}
+
+// FinishNativeExecutionExit is FinishNativeExecutionReport with the host's
+// physical cause of a crash ("exit code 1", "signal killed"), which the step
+// shows when its agent stopped.
+func (s *Store) FinishNativeExecutionExit(ctx context.Context, role string, rid int64, session, status, report, cause string) error {
 	if !s.postgres || rid <= 0 || role == "" || session == "" || (status != "exited" && status != "native-error" && status != "usage-limited") {
 		return errors.New("invalid native execution exit identity")
 	}
-	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session, truncateSupervision(report, 6000))
+	return s.closeSupervisedRunIdentity(ctx, rid, status, role, session, truncateSupervision(report, 6000), truncateSupervision(cause, 200))
 }
 
-func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, status, expectedRole, expectedSession, nativeReport string) error {
+func (s *Store) closeSupervisedRunIdentity(ctx context.Context, rid int64, status, expectedRole, expectedSession, nativeReport, cause string) error {
 	return s.WithTx(ctx, func(q Querier) error {
-		return closeSupervisedRunTx(ctx, q, rid, status, expectedRole, expectedSession, nativeReport)
+		return closeSupervisedRunTx(ctx, q, rid, status, expectedRole, expectedSession, nativeReport, cause)
 	})
 }
 
-func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, expectedRole, expectedSession, nativeReport string) error {
+func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, expectedRole, expectedSession, nativeReport, cause string) error {
 	usageLimited := status == "usage-limited"
 	if usageLimited {
 		status = "native-error"
@@ -159,6 +166,12 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 			return nil
 		}
 	}
+	// A crash is not a deliverable: its last message is whatever the agent was
+	// saying mid-work ("the tests are still running"). It never becomes the
+	// step's result.
+	if expectedRole != "" && status == "native-error" && !usageLimited && summary == "" {
+		return releaseCrashedRun(ctx, q, pid, bead, rid, cause, nativeReport)
+	}
 	if expectedRole != "" && summary == "" {
 		summary = strings.TrimSpace(nativeReport)
 		if summary == "" {
@@ -176,5 +189,64 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 		return e
 	}
 	_, e = q.ExecContext(ctx, `SELECT commander_resume_question_run(?,?)`, pid, bead)
+	return e
+}
+
+// AgentStopped begins the execution error of a step whose agent crashed, so the
+// board and the Commander say why it stopped instead of showing a stale result.
+const AgentStopped = "Agent stopped: "
+
+// CrashRestartFactKind marks the one automatic restart a step gets per plan
+// revision after its agent crashed.
+const CrashRestartFactKind = "crash-restart"
+
+// CrashRestartDelay spaces that restart from the crash.
+const CrashRestartDelay = 2 * time.Minute
+
+// releaseCrashedRun hands a crashed run's step on. The first crash at the
+// step's plan revision restarts it on a fresh agent after CrashRestartDelay; a
+// second crash, or a step that can no longer be restarted, goes to its
+// Commander with the cause. The run's custody ends either way.
+func releaseCrashedRun(ctx context.Context, q Querier, pid int64, bead string, rid int64, cause, lastNote string) error {
+	why := AgentStopped + "it crashed"
+	if cause = strings.TrimSpace(cause); cause != "" {
+		why += " (" + cause + ")"
+	}
+	note := strings.TrimSpace(lastNote)
+	var restarted bool
+	if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_comments c JOIN bead_tasks b ON b.project_id=c.project_id AND b.id=c.bead_id WHERE c.project_id=? AND c.bead_id=? AND c.fact_kind=? AND c.fact_value->>'plan_revision'=b.plan_revision::text)`, pid, bead, CrashRestartFactKind).Scan(&restarted); e != nil {
+		return e
+	}
+	now := time.Now()
+	if !restarted {
+		var revision int64
+		e := q.QueryRowContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=NULL,resume_plan_revision=0,execution_attempts=0,execution_due_at=?,execution_error=?
+ WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL
+ AND EXISTS(SELECT 1 FROM execution_slots x WHERE x.run_id=? AND x.plan_revision=b.plan_revision) RETURNING b.plan_revision`,
+			now.Add(CrashRestartDelay).Unix(), truncateSupervision(why+"; restarting it once on a fresh agent", 1000), pid, bead, rid, rid).Scan(&revision)
+		if e == nil {
+			fact := fmt.Sprintf(`{"plan_revision":%d,"run_id":%d}`, revision, rid)
+			text := why + ". cmdrd restarts this step once on a fresh agent."
+			if note != "" {
+				text += "\nIts last message (not a result): " + note
+			}
+			_, e = q.ExecContext(ctx, `INSERT INTO bead_comments(project_id,bead_id,id,author,text,created_at,run_id,fact_kind,fact_value) VALUES(?,?,?,'cmdrd',?,?,?,?,?::jsonb)`,
+				pid, bead, "crash-restart:"+fmt.Sprint(rid), text, now.UTC().Format(time.RFC3339Nano), rid, CrashRestartFactKind, fact)
+			return e
+		}
+		if !errors.Is(e, sql.ErrNoRows) {
+			return e
+		}
+	}
+	detail := why
+	if restarted {
+		detail += " again after its automatic restart"
+	}
+	detail += "; the Commander decides what happens next"
+	if note != "" {
+		detail += ". Last message: " + note
+	}
+	_, e := q.ExecContext(ctx, `UPDATE bead_tasks SET execution_ready=FALSE,resume_run_id=NULL,resume_plan_revision=0,execution_due_at=0,execution_error=?,responsible_agent_id=commander_supervisor(project_id,id) WHERE project_id=? AND id=? AND active_run_id=?`,
+		truncateSupervision(detail, 1000), pid, bead, rid)
 	return e
 }

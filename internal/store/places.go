@@ -364,7 +364,7 @@ func (s *Store) EndPlaceRun(ctx context.Context, runID int64, state, reason stri
 			runStatus = "orphan-reaped"
 		}
 		if s.postgres {
-			if err := closeSupervisedRunTx(ctx, q, runID, runStatus, "", "", ""); err != nil {
+			if err := closeSupervisedRunTx(ctx, q, runID, runStatus, "", "", "", ""); err != nil {
 				return err
 			}
 			// Missing reports require inspection, not automatic redispatch.

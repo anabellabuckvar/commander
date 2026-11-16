@@ -33,6 +33,12 @@ func (s *delayedNativeExitSink) FinishNativeExecutionReport(ctx context.Context,
 	}
 	return s.Store.FinishNativeExecutionReport(ctx, role, rid, sid, status, summary)
 }
+func (s *delayedNativeExitSink) FinishNativeExecutionExit(ctx context.Context, role string, rid int64, sid, status, summary, cause string) error {
+	if s.fail.Load() {
+		return errors.New("simulated unavailable exit commit")
+	}
+	return s.Store.FinishNativeExecutionExit(ctx, role, rid, sid, status, summary, cause)
+}
 func setupNativeExitHarness(t *testing.T, role string) (*harness, *store.Store, int64, int64, string) {
 	t.Helper()
 	h := newHarness(t)
