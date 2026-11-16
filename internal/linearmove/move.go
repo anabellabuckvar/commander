@@ -242,20 +242,19 @@ func syncOne(ctx context.Context, opts Options, key, id string, t Target, ledger
 		return nil, nil // not a ticket Linear knows (or not visible to this key)
 	}
 	cur := is.State
-	if w, ok := ledger.Written[id]; ok && w.StateID != cur.ID {
+	w, owned := ledger.Written[id]
+	if owned && w.StateID != cur.ID {
 		return nil, nil // someone moved it after Commander did: theirs to own
 	}
 	want := t.Want.stateType()
-	if cur.Type == "canceled" || cur.Type == "completed" || rank(cur.Type) < 0 || rank(cur.Type) >= rank(want) {
+	to := targetState(is.Team.States.Nodes, want)
+	if to == nil {
 		return nil, nil
 	}
-	var to *linearState
-	for i, s := range is.Team.States.Nodes {
-		if s.Type == want && (to == nil || s.Position < to.Position) {
-			to = &is.Team.States.Nodes[i]
-		}
-	}
-	if to == nil {
+	// A state Commander itself wrote that is the right type but the wrong state
+	// (an earlier version picked "Blocked" for started) is corrected in place.
+	correcting := owned && cur.Type == want && cur.ID != to.ID
+	if !correcting && (cur.Type == "canceled" || cur.Type == "completed" || rank(cur.Type) < 0 || rank(cur.Type) >= rank(want)) {
 		return nil, nil
 	}
 	var res struct {
@@ -277,4 +276,41 @@ func syncOne(ctx context.Context, opts Options, key, id string, t Target, ledger
 	m := Move{Ticket: id, From: cur.Name, To: to.Name, Why: t.Why, At: now}
 	ledger.Moves = append(ledger.Moves, m)
 	return &m, nil
+}
+
+// targetState is the team's state a move lands on: the one named "In Progress"
+// (started) or "Done" (completed) when the team has it, else the first state of
+// that type by position that is not a holding state. A team's first started
+// state is often "Blocked" or "In Review", which is not "work began".
+func targetState(states []linearState, want string) *linearState {
+	name := map[string]string{"started": "in progress", "completed": "done"}[want]
+	var first, firstPlain *linearState
+	for i, s := range states {
+		if s.Type != want {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(s.Name), name) {
+			return &states[i]
+		}
+		if first == nil || s.Position < first.Position {
+			first = &states[i]
+		}
+		if !holding(s.Name) && (firstPlain == nil || s.Position < firstPlain.Position) {
+			firstPlain = &states[i]
+		}
+	}
+	if firstPlain != nil {
+		return firstPlain
+	}
+	return first
+}
+
+func holding(name string) bool {
+	n := strings.ToLower(name)
+	for _, w := range []string{"block", "review", "wait", "hold", "paus"} {
+		if strings.Contains(n, w) {
+			return true
+		}
+	}
+	return false
 }

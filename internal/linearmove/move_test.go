@@ -25,6 +25,7 @@ var fakeStates = []linearState{
 	{ID: "s-triage", Name: "Triage", Type: "triage", Position: 0},
 	{ID: "s-backlog", Name: "Backlog", Type: "backlog", Position: 1},
 	{ID: "s-todo", Name: "Todo", Type: "unstarted", Position: 2},
+	{ID: "s-blocked", Name: "Blocked", Type: "started", Position: 2.5}, // first started state by position, as on the real teams
 	{ID: "s-review", Name: "In Review", Type: "started", Position: 4},
 	{ID: "s-progress", Name: "In Progress", Type: "started", Position: 3},
 	{ID: "s-done", Name: "Done", Type: "completed", Position: 5},
@@ -154,5 +155,24 @@ func TestSyncCarriesOnFromItsOwnWrite(t *testing.T) {
 func TestSyncNeedsAKey(t *testing.T) {
 	if _, err := Sync(context.Background(), Options{Home: t.TempDir()}, map[string]Target{"T-1": {Want: WantStarted}}); err != linearsync.ErrKey {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// Work began means In Progress, not the team's first started state ("Blocked"),
+// and a Blocked Commander wrote itself is corrected; one a person set is left.
+func TestSyncStartsInProgressAndCorrectsItsOwnBlocked(t *testing.T) {
+	f := &fakeLinear{state: map[string]string{"T-1": "s-todo", "T-2": "s-blocked", "T-3": "s-blocked"}}
+	srv := f.server(t)
+	defer srv.Close()
+	opts := moverOpts(t, srv)
+	if err := writeLedger(opts.Home, Ledger{Written: map[string]Written{"T-2": {StateID: "s-blocked", State: "Blocked"}}}); err != nil {
+		t.Fatal(err)
+	}
+	targets := map[string]Target{"T-1": {Want: WantStarted}, "T-2": {Want: WantStarted}, "T-3": {Want: WantStarted}}
+	if _, err := Sync(context.Background(), opts, targets); err != nil {
+		t.Fatal(err)
+	}
+	if f.state["T-1"] != "s-progress" || f.state["T-2"] != "s-progress" || f.state["T-3"] != "s-blocked" {
+		t.Fatalf("states = %v", f.state)
 	}
 }
