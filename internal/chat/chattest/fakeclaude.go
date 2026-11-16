@@ -11,6 +11,8 @@
 //	long         a slow stream of text deltas (interrupt it)
 //	deaf long    the same, but control interrupts are ignored (only SIGINT works)
 //	task         a sub-agent: task_started, nested text, task_notification
+//	bgtask       a turn that ends (a result) while a background task still runs;
+//	             4 s later the task completes and a follow-up turn ends
 //	compact      a compacting status, then a compact_boundary (also /compact)
 //	fullctx      a two-call turn whose last call fills 80% of a 1000-token window
 //	ratelimit    a rate_limit_event (allowed, five_hour 50%, seven_day 20%)
@@ -266,6 +268,13 @@ func (f *fake) turn(text string) int {
 		if !f.longText(strings.Contains(text, "deaf")) {
 			result, reason = "error_during_execution", "aborted_streaming"
 		}
+	case strings.Contains(text, "bgtask"):
+		f.emit(map[string]any{"type": "system", "subtype": "task_started", "task_id": "bg1", "tool_use_id": "toolu_bg", "description": "regression run"})
+		f.cost += 0.01
+		f.emit(map[string]any{"type": "result", "subtype": "success", "is_error": false, "result": "Waiting on the regression run.", "total_cost_usd": f.cost, "num_turns": 1, "duration_ms": 5})
+		time.Sleep(4 * time.Second)
+		f.emit(map[string]any{"type": "system", "subtype": "task_notification", "task_id": "bg1", "tool_use_id": "toolu_bg", "status": "completed", "summary": "regression run"})
+		f.textBlock("", "regression passed after the background run", 0, false)
 	case strings.Contains(text, "task"):
 		f.emit(map[string]any{"type": "system", "subtype": "task_started", "task_id": "t1", "tool_use_id": "toolu_task", "description": "explore"})
 		f.textBlockParent("toolu_task", "sub-agent says hi")

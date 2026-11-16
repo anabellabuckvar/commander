@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -27,8 +28,103 @@ func nativeExitPath(home, role string, rid int64) string {
 	return filepath.Join(home, "chat", "native-exits", fmt.Sprintf("%s.%d.json", role, rid))
 }
 
-// The host, not the daemon, bounds an execution to one completed turn. Closing
-// stdin and escalation continue even while the daemon is restarting.
+// nativeTaskGrace is how long the host waits, once an execution's background
+// tasks have all finished, for claude to start and end the follow-up turn
+// before treating the last result as final. nativeTaskMaxWait caps the wait
+// for background tasks themselves.
+var (
+	nativeTaskGrace   = 2 * time.Minute
+	nativeTaskMaxWait = 4 * time.Hour
+)
+
+// trackBackgroundTask follows claude's task_* system events: a task that has
+// started and not reached a terminal state keeps the execution open.
+func (h *host) trackBackgroundTask(raw []byte) {
+	var ev struct {
+		Subtype   string `json:"subtype"`
+		TaskID    string `json:"task_id"`
+		ToolUseID string `json:"tool_use_id"`
+		Status    string `json:"status"`
+		Patch     struct {
+			Status string `json:"status"`
+		} `json:"patch"`
+	}
+	if json.Unmarshal(raw, &ev) != nil || !strings.HasPrefix(ev.Subtype, "task_") {
+		return
+	}
+	id := ev.TaskID
+	if id == "" {
+		id = ev.ToolUseID
+	}
+	if id == "" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.bgTasks == nil {
+		h.bgTasks = map[string]bool{}
+	}
+	switch {
+	case ev.Subtype == "task_started":
+		h.bgTasks[id] = true
+	case ev.Subtype == "task_notification", isTerminalTaskStatus(ev.Status), isTerminalTaskStatus(ev.Patch.Status):
+		delete(h.bgTasks, id)
+		if len(h.bgTasks) == 0 && h.pendingResult != nil {
+			go h.finishAfterQuiet()
+		}
+	}
+}
+
+// onNativeResult ends the execution at a turn with no background tasks left;
+// a turn that ends while some still run waits for claude's follow-up turn.
+func (h *host) onNativeResult(raw []byte) {
+	h.mu.Lock()
+	if len(h.bgTasks) == 0 {
+		h.pendingResult = nil
+		h.mu.Unlock()
+		h.finishNativeTurn(raw)
+		return
+	}
+	h.pendingResult = append([]byte(nil), raw...)
+	first := h.waitingSince.IsZero()
+	if first {
+		h.waitingSince = time.Now()
+	}
+	h.mu.Unlock()
+	if first {
+		time.AfterFunc(nativeTaskMaxWait, func() {
+			h.mu.Lock()
+			last := h.pendingResult
+			h.mu.Unlock()
+			if last != nil {
+				h.finishNativeTurn(last)
+			}
+		})
+	}
+}
+
+// finishAfterQuiet ends the execution with the last waiting result once the
+// background tasks are done and claude has been quiet for nativeTaskGrace
+// without finishing a follow-up turn (which would have ended it already).
+func (h *host) finishAfterQuiet() {
+	for {
+		time.Sleep(nativeTaskGrace)
+		h.mu.Lock()
+		last, quiet, busy := h.pendingResult, time.Since(h.lastLineAt) >= nativeTaskGrace, len(h.bgTasks) > 0
+		h.mu.Unlock()
+		if last == nil || busy {
+			return
+		}
+		if quiet {
+			h.finishNativeTurn(last)
+			return
+		}
+	}
+}
+
+// The host, not the daemon, bounds an execution to one completed turn (one with
+// no background tasks still running). Closing stdin and escalation continue even
+// while the daemon is restarting.
 func (h *host) finishNativeTurn(raw []byte) {
 	h.nativeEndOnce.Do(func() {
 		var result struct {
@@ -51,6 +147,9 @@ func (h *host) finishNativeTurn(raw []byte) {
 				if signal != 0 {
 					h.mu.Lock()
 					gone := h.exited != nil
+					if !gone {
+						h.hostTerminated = true
+					}
 					h.mu.Unlock()
 					if gone {
 						return
@@ -76,7 +175,16 @@ func (h *host) persistNativeExit(exit *hostExit) {
 		return
 	}
 	status := "exited"
-	if exit.Code != 0 || exit.Signal != "" || h.nativeResultError {
+	h.mu.Lock()
+	stoppedByHost := h.hostTerminated
+	h.mu.Unlock()
+	// The host's own stop after a finished, successful turn is the normal end of
+	// an execution, not a crash.
+	failed := exit.Code != 0 || exit.Signal != ""
+	if failed && stoppedByHost && !h.nativeResultError {
+		failed = false
+	}
+	if failed || h.nativeResultError {
 		status = "native-error"
 	}
 	if h.nativeLimit != nil && (h.nativeLimit.fromText || h.nativeResultError) {

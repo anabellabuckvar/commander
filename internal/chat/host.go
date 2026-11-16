@@ -116,9 +116,17 @@ type host struct {
 	nativeLimit         *UsageLimit
 	nativeResultError   bool
 	nativeResultSummary string
-	client              *hostClientConn
-	stderr              tailBuffer
-	lock                *os.File // the session lock, dropped when claude is gone
+	// An execution's turn can end while its own background tasks (a long test
+	// run, a CI wait) still run; claude then starts the next turn itself when
+	// they finish. The host waits for that turn instead of ending the run.
+	bgTasks        map[string]bool
+	pendingResult  []byte    // the last result seen while background tasks ran
+	waitingSince   time.Time // first result that had to wait, for the cap
+	lastLineAt     time.Time
+	hostTerminated bool // the host itself stopped claude after a finished turn
+	client         *hostClientConn
+	stderr         tailBuffer
+	lock           *os.File // the session lock, dropped when claude is gone
 }
 
 type hostClientConn struct {
@@ -248,6 +256,7 @@ func (h *host) pump(stdout io.Reader) {
 		h.journal = append(h.journal, journalLine{idx: h.next, line: line})
 		h.bytes += len(line)
 		h.next++
+		h.lastLineAt = time.Now()
 		if t.Type == "result" {
 			h.turnStart = h.next
 		}
@@ -257,8 +266,13 @@ func (h *host) pump(stdout io.Reader) {
 		}
 		h.cond.Broadcast()
 		h.mu.Unlock()
-		if t.Type == "result" && h.cfg.Info.ExecutionRunID > 0 {
-			h.finishNativeTurn(sc.Bytes())
+		if h.cfg.Info.ExecutionRunID > 0 {
+			if t.Type == "system" {
+				h.trackBackgroundTask(sc.Bytes())
+			}
+			if t.Type == "result" {
+				h.onNativeResult(sc.Bytes())
+			}
 		}
 	}
 	err := h.cmd.Wait()

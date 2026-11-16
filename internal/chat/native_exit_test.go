@@ -485,3 +485,38 @@ func TestNativeTerminalReportSurvivesFailedCommitAndFollowsJurisdiction(t *testi
 	}
 
 }
+
+// An execution whose turn ends while its own background task still runs (a long
+// test run) is not stopped: the follow-up turn that claude starts when the task
+// finishes is the one that ends the run, and the host's own stop is a normal exit.
+func TestNativeExecutionWaitsForItsBackgroundTasks(t *testing.T) {
+	var scenario struct{ Role string }
+	raw, e := os.ReadFile(filepath.Join("..", "..", "tests", "evals", "scenarios", "commander-native-exit-lifecycle.json"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = json.Unmarshal(raw, &scenario); e != nil || scenario.Role == "" {
+		t.Fatal("missing native lifecycle scenario", e)
+	}
+	h, st, _, rid, _ := setupNativeExitHarness(t, scenario.Role)
+	ctx := context.Background()
+	process, e := h.e.Start(ctx, scenario.Role, StartOptions{})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = h.e.Send(ctx, scenario.Role, "bgtask"); e != nil {
+		t.Fatal(e)
+	}
+	waitUntil(t, "the follow-up turn ran and the run closed", func() bool {
+		r, e := st.GetAgentRun(ctx, rid)
+		return e == nil && r.Status != "running" && !alive(process.PID)
+	})
+	r, e := st.GetAgentRun(ctx, rid)
+	if e != nil || r.Status != "exited" {
+		t.Fatalf("a run stopped by the host after its follow-up turn is a normal exit, got %+v %v", r, e)
+	}
+	log, _ := os.ReadFile(filepath.Join(h.home, "chat", scenario.Role+".jsonl"))
+	if !strings.Contains(string(log), "regression passed after the background run") {
+		t.Fatal("the run was stopped before its background task finished and the follow-up turn ran")
+	}
+}
