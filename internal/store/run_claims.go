@@ -101,8 +101,17 @@ func claimRun(ctx context.Context, q Querier, r AgentRun) (int64, error) {
 			var sourceBead string
 			var sourceDriver, sourceRuntime, sourceAccount, sourceWorktree string
 			var sourceUsage bool
-			if e := q.QueryRowContext(ctx, `SELECT execution_driver,execution_runtime,execution_account,status='native-error' AND EXISTS(SELECT 1 FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.id='native-exit:'||r.id::text AND c.fact_kind='native-usage-limit'),COALESCE(worktree_path,'') FROM agent_runs r WHERE id=?`, sourceRun).Scan(&sourceDriver, &sourceRuntime, &sourceAccount, &sourceUsage, &sourceWorktree); e != nil {
+			var cutoverTo string
+			if e := q.QueryRowContext(ctx, `SELECT execution_driver,execution_runtime,execution_account,status='native-error' AND EXISTS(SELECT 1 FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.id='native-exit:'||r.id::text AND c.fact_kind='native-usage-limit'),COALESCE(worktree_path,''),
+ CASE WHEN status<>'running' THEN COALESCE((SELECT c.fact_value->>'to' FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.fact_kind=?::text ORDER BY c.created_at DESC,c.id DESC LIMIT 1),'') ELSE '' END FROM agent_runs r WHERE id=?`, CutoverFactKind, sourceRun).Scan(&sourceDriver, &sourceRuntime, &sourceAccount, &sourceUsage, &sourceWorktree, &cutoverTo); e != nil {
 				return e
+			}
+			// A Commander cutover hands the stopped run to its named runtime only.
+			if cutoverTo != "" {
+				if r.ExecutionRuntime != cutoverTo {
+					return errors.New("cutover resumes only on the runtime Commander named")
+				}
+				sourceUsage = true
 			}
 			var checkpoint bool
 			if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM bead_questions q JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id WHERE q.run_id=? AND q.blocking AND q.state='pending' AND q.plan_revision=b.plan_revision)`, sourceRun).Scan(&checkpoint); e != nil {

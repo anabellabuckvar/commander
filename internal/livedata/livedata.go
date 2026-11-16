@@ -34,6 +34,7 @@ type Data struct {
 	workstreams        []Workstream
 	Postgres           bool                      `json:"postgres,omitempty"`
 	ObservedExecutions []store.ObservedExecution `json:"-"` // nil retains legacy projection; non-nil is current PG evidence
+	Cutovers           []store.ExecutionCutover  `json:"-"` // runtime switches and stops in progress
 	Projects           []store.Project
 	Objectives         []ObjectiveRow
 	Operators          []OperatorRow
@@ -70,8 +71,9 @@ func (d Data) Parents() beads.Parents {
 // ObjectiveRow is a flattened cross-project objective (a workstream or one of
 // its steps). ProjectName is best-effort: the first linked project's name.
 type ObjectiveRow struct {
-	Withdrawn                                           bool  // the withdrawn label: a cancelled request, never anyone's move
-	ProgressAt                                          int64 // last recorded progress (unix s)
+	Withdrawn                                           bool   // the withdrawn label: a cancelled request, never anyone's move
+	Runtime                                             string // its runtime: label (claude or codex), "" = none of its own
+	ProgressAt                                          int64  // last recorded progress (unix s)
 	PlanningPending                                     bool
 	ResultRunID, ResultReadyAt                          int64
 	QuestionWaiting                                     bool
@@ -898,6 +900,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			Gate:          slices.Contains(objective.Labels, beads.GateLabel) || approvalOnly[objective.ID],
 			ClosingGate:   beads.IsClosingGate(objective.Labels),
 			Phase:         phaseOf(objective.Labels),
+			Runtime:       runtimeLabel(objective.Labels),
 			Approvers:     Approvers(objective.Labels),
 			AskAnswered:   slices.Contains(objective.Labels, beads.DecisionAnsweredLabel),
 			GateNote:      gateNote(objective),
@@ -1401,6 +1404,16 @@ func phaseOf(labels []string) string {
 	for _, l := range labels {
 		if v, ok := strings.CutPrefix(l, "phase:"); ok && (v == "scoping" || v == "building" || v == "rollout") {
 			return v
+		}
+	}
+	return ""
+}
+
+// runtimeLabel is the runtime a runtime:claude or runtime:codex label asks for.
+func runtimeLabel(labels []string) string {
+	for _, l := range labels {
+		if rt, ok := strings.CutPrefix(l, "runtime:"); ok && (rt == "claude" || rt == "codex") {
+			return rt
 		}
 	}
 	return ""

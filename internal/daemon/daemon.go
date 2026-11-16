@@ -588,6 +588,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		go func() { defer d.executionWG.Done(); d.runExecution(ctx) }()
 		if d.chat != nil {
 			go executionRedirector{store: d.store, send: d.chat.Send}.run(ctx)
+			go executionCutover{store: d.store, send: d.chat.Send, stop: d.chat.Stop}.run(ctx)
 		}
 	} else {
 		d.scheduler.Start(ctx)

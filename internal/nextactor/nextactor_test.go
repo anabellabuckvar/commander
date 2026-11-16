@@ -74,7 +74,9 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"waiting on a reviewer", open(func(b *Bead) { b.Waits = []beads.Wait{review} }), false, 0, External, "wait:review", "Waiting on review by alex"},
 		{"waiting for a date", open(func(b *Bead) { b.Waits = []beads.Wait{future} }), false, 0, External, "wait:until", "Waiting on rollout window"},
 		{"a date that passed is owed", open(func(b *Bead) { b.Waits = []beads.Wait{past} }), true, 0, Commander, "wait_over", "Commander: act on"},
-		{"a date long passed, Commander busy elsewhere", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}} }), true, 0, Stuck, "commander_idle:wait_over", "Stuck: Commander has not got to act on"},
+		{"a date long passed, Commander busy elsewhere", open(func(b *Bead) {
+			b.Waits = []beads.Wait{{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}}
+		}), true, 0, Stuck, "commander_idle:wait_over", "Stuck: Commander has not got to act on"},
 		{"legacy Manager handoff is Commander's", open(func(b *Bead) { b.Waits = []beads.Wait{handoff} }), true, 0, Commander, "wait_over", "Commander: act on"},
 		{"user wait beats CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci, {Kind: beads.WaitUser}}; b.UserAsk = "approve" }), false, 0, User, "waiting_user", "Needs you"},
 		{"queued for capacity", open(func(b *Bead) { b.ReadyQueued = true }), false, 0, Agent, "queued", "Queued"},
@@ -304,5 +306,49 @@ func TestRollupLeadsWithTheRunningAgentOverAStepWaitingForIt(t *testing.T) {
 	// With no agent running in the row, the step waiting on another one leads.
 	if got := Rollup([]Result{waiting}).Lead; got.Bead != "review" {
 		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestCutoverReadsAsTheSwitchInProgress(t *testing.T) {
+	before := func(d time.Duration) int64 { return now.Add(-d).Unix() }
+	running := func(mut func(b *Bead)) Bead {
+		b := Bead{ID: "b", Title: "Make the read fast", Status: "open", PlanningCommander: "commander",
+			Executing: true, ExecWorking: true, ExecRole: "operator-x", ExecSince: before(time.Minute), ProgressAt: before(time.Minute), RunRuntime: "codex", WantRuntime: "claude"}
+		mut(&b)
+		return b
+	}
+	cases := []struct {
+		name   string
+		bead   Bead
+		actor  Actor
+		reason string
+		text   string
+	}{
+		{"switch asked", running(func(b *Bead) {
+			b.Cutover, b.CutoverTo, b.CutoverFrom, b.CutoverSince = true, "claude", "codex", before(2*time.Minute)
+		}),
+			Agent, "cutover", "Switching to Claude: Codex agent saving its work (2 minutes)"},
+		{"switch outlived the stop", running(func(b *Bead) {
+			b.Cutover, b.CutoverTo, b.CutoverFrom, b.CutoverSince = true, "claude", "codex", before(20*time.Minute)
+		}),
+			Stuck, "cutover_stalled", "Stuck: the Codex agent asked to stop is still running (20 minutes)"},
+		{"stop asked", running(func(b *Bead) { b.Cutover, b.CutoverFrom, b.CutoverSince = true, "codex", before(time.Minute) }),
+			Agent, "cutover", "Stopping the agent: it is saving its work (1 minute)"},
+		{"old agent gone, new one queued", Bead{ID: "b", Title: "Make the read fast", Status: "open", ReadyQueued: true, Cutover: true, CutoverTo: "claude", CutoverFrom: "codex", CutoverSince: before(3 * time.Minute)},
+			Agent, "cutover_starting", "Switching to Claude: starting a Claude agent"},
+		{"running on the other runtime", running(func(b *Bead) {}),
+			Agent, "executing", "Working on \u201cMake the read fast\u201d on Codex, though the step asks for Claude"},
+		{"running on the asked runtime", running(func(b *Bead) { b.RunRuntime = "claude" }),
+			Agent, "executing", "Working on \u201cMake the read fast\u201d"},
+		{"stopped, Commander re-plans", Bead{ID: "b", Title: "Make the read fast", Status: "open", Stopped: true, PlanningCommander: "commander"},
+			Commander, "plan", "Commander: re-plan the step whose agent it stopped"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := Decide(c.bead, ctxWith(true, 0, nil))
+			if r.Actor != c.actor || r.Reason != c.reason || r.Text != c.text {
+				t.Fatalf("got %+v, want %s %s %q", r, c.actor, c.reason, c.text)
+			}
+		})
 	}
 }

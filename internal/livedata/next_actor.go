@@ -168,9 +168,15 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	for _, run := range b.s.Executions {
 		if run.ProjectID == pid && run.BeadID == s.BeadID {
 			n.Executing, n.ExecRole, n.ExecWorking = true, run.Role, run.State == store.AgentWorking
+			n.RunRuntime = run.Runtime
 			break
 		}
 	}
+	n.WantRuntime = s.Runtime
+	if c := s.Cutover; c != nil {
+		n.Cutover, n.CutoverTo, n.CutoverFrom, n.CutoverSince = true, c.To, c.From, c.Since
+	}
+	n.Stopped = !s.ExecutionReady && strings.HasPrefix(s.ExecutionError, store.StoppedByCommander)
 	if !n.Executing {
 		for _, run := range b.s.ExecutionChecks {
 			if run.ProjectID == pid && run.BeadID == s.BeadID {

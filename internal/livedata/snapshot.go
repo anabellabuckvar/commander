@@ -154,6 +154,7 @@ type SnapProject struct {
 type SnapWorkstream struct {
 	Withdrawn            bool            `json:"withdrawn,omitempty"`   // a cancelled request
 	Phase                string          `json:"phase,omitempty"`       // scoping, building or rollout
+	Runtime              string          `json:"runtime,omitempty"`     // its runtime: label (its steps inherit it)
 	ProgressAt           int64           `json:"progress_at,omitempty"` // last recorded progress (unix s)
 	TypedWaits           []beads.Wait    `json:"-"`                     // the root's recorded waits
 	PlanningPending      bool            `json:"planning_pending,omitempty"`
@@ -237,7 +238,17 @@ type SnapGate struct {
 }
 
 // SnapStep is one step; phases carry their children and a one-line note.
+// SnapCutover is a runtime switch or stop Commander asked of a step's agent.
+type SnapCutover struct {
+	To      string `json:"to,omitempty"` // "" = a stop
+	From    string `json:"from,omitempty"`
+	Since   int64  `json:"since"`
+	Running bool   `json:"running"` // the old agent has not stopped yet
+}
+
 type SnapStep struct {
+	Runtime              string                  `json:"runtime,omitempty"` // the runtime its agents launch on (its own or an ancestor's runtime: label)
+	Cutover              *SnapCutover            `json:"cutover,omitempty"`
 	Hold                 bool                    `json:"hold,omitempty"`        // the hold label on this bead
 	HoldReason           string                  `json:"hold_reason,omitempty"` // from its latest "hold by" comment
 	Withdrawn            bool                    `json:"withdrawn,omitempty"`   // a cancelled request
@@ -503,7 +514,7 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		PlanningPending: r.PlanningPending, PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
 		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
-		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits, Phase: r.Phase,
+		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits, Phase: r.Phase, Runtime: r.Runtime,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,
 		ManagerRole: store.WorkstreamManagerRole(r.BeadID), NowStep: now,
 		Total: len(ws.Steps), Steps: snapSteps(roots, now, live, true),
@@ -588,7 +599,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 	for _, n := range nodes {
 		o := n.Row
 		st := SnapStep{
-			Hold: o.Hold, HoldReason: o.HoldReason, Withdrawn: o.Withdrawn, ProgressAt: o.ProgressAt, TypedWaits: o.Waits,
+			Hold: o.Hold, HoldReason: o.HoldReason, Withdrawn: o.Withdrawn, ProgressAt: o.ProgressAt, TypedWaits: o.Waits, Runtime: o.Runtime,
 			ResultRunID: o.ResultRunID, ResultReadyAt: o.ResultReadyAt, QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
 			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
 			PlanningPending: o.PlanningPending, PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
@@ -907,6 +918,9 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 			return Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: "Current execution evidence is unavailable"}}
 		}
 		data.ObservedExecutions = facts
+		if data.Cutovers, err = s.Deps.Store.ExecutionCutovers(ctx); err != nil {
+			return Snapshot{Storage: "postgres", Executions: []SnapExecution{}, Degraded: &SnapDegraded{Reason: "Current execution evidence is unavailable"}}
+		}
 		data.Objectives = markObservedExecutionOwners(data.Objectives, facts)
 		maskObservedAgentStates(&data)
 
@@ -1028,6 +1042,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	if s.Deps.Store != nil && s.Deps.Store.IsPostgres() {
 		snap.Storage = "postgres"
 		snap.Executions = executionOf(snap, data, currentChats)
+		applyCutovers(&snap, data.Cutovers)
 		if data.ObservedExecutions != nil {
 			snap.ExecutionChecks = unverifiedExecutionOf(snap, data)
 			applyObservedWorking(&snap)
@@ -1162,4 +1177,36 @@ func hasGateBelow(n *StepNode) bool {
 		}
 	}
 	return false
+}
+
+// applyCutovers resolves each step's runtime through its ancestors and marks
+// the steps whose agent Commander asked to switch runtime or stop.
+func applyCutovers(snap *Snapshot, cutovers []store.ExecutionCutover) {
+	type key struct {
+		pid  int64
+		bead string
+	}
+	byBead := map[key]store.ExecutionCutover{}
+	for _, c := range cutovers {
+		if old, ok := byBead[key{c.ProjectID, c.BeadID}]; !ok || c.RequestedAt > old.RequestedAt {
+			byBead[key{c.ProjectID, c.BeadID}] = c
+		}
+	}
+	var walk func(pid int64, steps []SnapStep, inherited string)
+	walk = func(pid int64, steps []SnapStep, inherited string) {
+		for i := range steps {
+			s := &steps[i]
+			if s.Runtime == "" {
+				s.Runtime = inherited
+			}
+			if c, ok := byBead[key{pid, s.BeadID}]; ok {
+				s.Cutover = &SnapCutover{To: c.To, From: c.From, Since: c.RequestedAt, Running: c.Running}
+			}
+			walk(pid, s.Children, s.Runtime)
+		}
+	}
+	for i := range snap.Workstreams {
+		ws := &snap.Workstreams[i]
+		walk(ws.ProjectID, ws.Steps, ws.Runtime)
+	}
 }

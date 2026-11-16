@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/example-user/commander/internal/execution"
 	"github.com/example-user/commander/internal/ownercompat"
 	"github.com/example-user/commander/internal/place"
 	"os"
@@ -46,6 +47,9 @@ type internalObjectiveEditResult struct {
 	Custody []string `json:"custody,omitempty"`
 	// Card is "stored" (new card) or "replaced" (an open card was swapped) when a --decision was written.
 	Card string `json:"card,omitempty"`
+	// Switching lists the steps whose running agent was asked to stop and
+	// continue on the new --runtime.
+	Switching []string `json:"switching,omitempty"`
 	// Proposed is the kind of proposal the write became (a Manager's ask or long
 	// wait): Commander accepts or overrules it before it reaches the user.
 	Proposed string `json:"proposed,omitempty"`
@@ -441,6 +445,13 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 		if *runtimeArg != "" {
 			if err := applySoleLabel(ctx, bc, dir, *beadID, "runtime:", *runtimeArg); err != nil {
 				return result, err
+			}
+			if *runtimeArg != "none" {
+				moved, err := switchRunningRuntime(ctx, bc, dir, *projectName, *beadID, *runtimeArg)
+				if err != nil {
+					return result, err
+				}
+				result.Switching = moved
 			}
 		}
 		if *viz != "" {
@@ -1501,4 +1512,42 @@ func holdManagerOwner(ctx context.Context, bc beads.Client, dir, beadID, newOwne
 	}
 	w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerDispatchWait}
 	return bc.SetLabel(ctx, dir, beadID, w.Label(), true)
+}
+
+// switchRunningRuntime is the cutover for a --runtime change: every agent
+// running on beadID or a step under it, on the other runtime, where that step
+// now resolves to runtime, is asked to save its work and stop; cmdrd then
+// resumes the step from that run on runtime (daemon executionCutover, store
+// settleCutoverExit). It returns the steps asked.
+func switchRunningRuntime(ctx context.Context, bc beads.Client, dir, projectName, beadID, runtime string) ([]string, error) {
+	st, cleanup, err := needsYouStoreFn()
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	if !st.IsPostgres() {
+		return nil, nil
+	}
+	project, err := st.GetProjectByName(ctx, projectName)
+	if err != nil || project == nil {
+		return nil, fmt.Errorf("project %q: %v", projectName, err)
+	}
+	running, err := st.RunningUnder(ctx, project.ID, beadID)
+	if err != nil {
+		return nil, err
+	}
+	var moved []string
+	for _, x := range running {
+		if x.Runtime == runtime || execution.RuntimePreference(ctx, bc, dir, x.BeadID) != runtime {
+			continue
+		}
+		rid, err := st.RequestExecutionCutover(ctx, project.ID, x.BeadID, runtime, "Commander switched this step to "+runtime, os.Getenv("COMMANDER_ROLE"))
+		if err != nil {
+			return moved, err
+		}
+		if rid > 0 {
+			moved = append(moved, x.BeadID)
+		}
+	}
+	return moved, nil
 }

@@ -16,7 +16,7 @@ import (
 
 func runExecution(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: cmdr execution status|ready|pause --project-id ID --bead ID [--revision N --jurisdiction-revision N --capabilities code,mac]")
+		fmt.Fprintln(stderr, "usage: cmdr execution status|ready|pause --project-id ID --bead ID [--revision N --jurisdiction-revision N --capabilities code,mac]\n       cmdr execution stop --project-id ID --bead ID [--reason TEXT]   ask its running agent to save its work and stop (cmdrd stops it after 10 minutes); it stays stopped until re-planned")
 		return 2
 	}
 	fs := flag.NewFlagSet("execution", flag.ContinueOnError)
@@ -26,10 +26,11 @@ func runExecution(args []string, stdout, stderr io.Writer) int {
 	revision := fs.Int64("revision", 0, "")
 	jrev := fs.Int64("jurisdiction-revision", 0, "")
 	caps := fs.String("capabilities", "", "")
+	reason := fs.String("reason", "", "")
 	if fs.Parse(args[1:]) != nil || fs.NArg() != 0 || *pid <= 0 || *bead == "" {
 		return 2
 	}
-	if args[0] != "status" && args[0] != "ready" && args[0] != "pause" {
+	if args[0] != "status" && args[0] != "ready" && args[0] != "pause" && args[0] != "stop" {
 		return 2
 	}
 	if args[0] != "status" && beads.HasExecutionAttribution(os.Environ()) {
@@ -50,6 +51,24 @@ func runExecution(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	var out any
+	if args[0] == "stop" {
+		actor := os.Getenv("COMMANDER_ROLE")
+		if actor == "" && os.Getenv("COMMANDER_MANAGER_ROLE") != "" {
+			fmt.Fprintln(stderr, "executor cannot stop executions")
+			return 1
+		}
+		rid, e := st.RequestExecutionCutover(ctx, *pid, *bead, "", strings.TrimSpace(*reason), actor)
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 1
+		}
+		if rid == 0 {
+			fmt.Fprintf(stderr, "no agent is running on %s; to keep it from starting, use cmdr execution pause\n", *bead)
+			return 1
+		}
+		_ = json.NewEncoder(stdout).Encode(map[string]any{"stopping_run": rid, "bead_id": *bead})
+		return 0
+	}
 	if args[0] == "status" {
 		var raw []byte
 		e = st.DB().QueryRowContext(ctx, `SELECT jsonb_build_object('project_id',project_id,'bead_id',id,'plan_revision',plan_revision,'planning_commander',commander_planning_owner(project_id,id),'jurisdiction_revision',COALESCE((SELECT revision FROM jurisdiction_projects WHERE project_id=b.project_id),1),'ready',execution_ready,'capabilities',execution_capabilities,'attempts',execution_attempts,'retry_at',execution_due_at,'error',execution_error,'active_run_id',active_run_id) FROM bead_tasks b WHERE project_id=? AND id=? AND deleted_at IS NULL`, *pid, *bead).Scan(&raw)

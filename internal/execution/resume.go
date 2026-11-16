@@ -34,6 +34,14 @@ func (w *Worker) resumeQuestionCheckpoint(ctx context.Context, c store.Execution
 	if usageRecovery && prior.ExecutionDriver == "native" {
 		r.UsageRecovery = true
 		r.Runtime = chat.ReadRuntimePin(agentrt.CommanderHome(), prior.AgentName)
+		// A cutover names the runtime the Commander moved this step to.
+		to, err := w.Store.CutoverTarget(ctx, prior.ID)
+		if err != nil {
+			return err
+		}
+		if to != "" {
+			r.Runtime = to
+		}
 		return resumeUsageWorkspace(ctx, c, r, *prior)
 	}
 	r.ResumeSessionID = prior.OpencodeSessionID

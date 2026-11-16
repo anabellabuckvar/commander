@@ -102,6 +102,12 @@ func closeSupervisedRunTx(ctx context.Context, q Querier, rid int64, status, exp
 			return e
 		}
 	}
+	// A cutover the Commander asked for settles the exit: a runtime move
+	// resumes this run's work on the new runtime, a stop waits for re-planning.
+	// Neither is a result to review.
+	if handled, e := settleCutoverExit(ctx, q, pid, bead, rid); e != nil || handled {
+		return e
+	}
 	// A blocking question is a checkpoint, not a completed deliverable.
 	// Preserve its exact resume source regardless of answer/exit ordering.
 	if expectedRole != "" {

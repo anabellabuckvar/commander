@@ -18,10 +18,10 @@ import (
 	"github.com/example-user/commander/internal/store"
 )
 
-// runtimePreference is the runtime a step asks its agents to run on: a
+// RuntimePreference is the runtime a step asks its agents to run on: a
 // runtime:claude or runtime:codex label on the step or its nearest labelled
 // ancestor (a nested workstream labels all its steps). "" = the account order.
-func runtimePreference(ctx context.Context, bc beads.Client, dir, id string) string {
+func RuntimePreference(ctx context.Context, bc beads.Client, dir, id string) string {
 	for i := 0; i < 8 && id != ""; i++ {
 		b, err := bc.Show(ctx, dir, id)
 		if err != nil || b == nil {
@@ -207,7 +207,7 @@ func (w *Worker) PassSlot(ctx context.Context, slot string) error {
 			orders, orderErr := w.Store.AgentAccounts(launchCtx)
 			e = orderErr
 			request.AgentAccounts = orders[store.AgentKindAgent]
-			if rt := runtimePreference(launchCtx, beads.New(), claim.Project.Path, claim.BeadID); rt != "" {
+			if rt := RuntimePreference(launchCtx, beads.New(), claim.Project.Path, claim.BeadID); rt != "" {
 				request.AgentAccounts = preferRuntime(request.AgentAccounts, rt)
 			}
 			if e == nil {

@@ -33,6 +33,7 @@ const (
 	NoProgressStuck     = 20 * time.Minute // an executing agent, idle, recording no progress
 	BusyNoProgressStuck = 60 * time.Minute // an executing agent mid-turn recording no progress
 	UnverifiedStuck     = 5 * time.Minute  // a claim with no live process evidence
+	CutoverStuck        = 15 * time.Minute // an agent asked to stop that is still running (cmdrd stops it at 10)
 	maxChainDepth       = 32
 )
 
@@ -75,6 +76,14 @@ type Bead struct {
 	ResultReady         bool // a recorded result waits for review
 	ResultSince         int64
 	PlanningPending     bool
+
+	WantRuntime  string // the runtime the step asks for: its runtime: label or its nearest ancestor's
+	RunRuntime   string // the runtime its running agent is on
+	Cutover      bool   // Commander asked its agent to save its work and stop
+	CutoverTo    string // then continue on this runtime ("" = stay stopped)
+	CutoverFrom  string
+	CutoverSince int64
+	Stopped      bool // Commander stopped its agent (cmdr execution stop): re-planning is owed
 
 	PlanningCommander string
 	UsageCapacity     string // eligible queued execution exhausted connected accounts
@@ -227,9 +236,17 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		if b.NoCapableSlot {
 			return Result{Actor: Stuck, Reason: "no_capable_slot", Text: "Stuck: no agent slot can run " + quoted(b.Title), Bead: b.ID}
 		}
+		if b.Cutover && b.CutoverTo != "" {
+			to := runtimeName(b.CutoverTo)
+			return Result{Actor: Agent, Reason: "cutover_starting", Since: b.CutoverSince, Text: "Switching to " + to + ": starting a " + to + " agent", Bead: b.ID}
+		}
 		return Result{Actor: Agent, Reason: "queued", Text: "Queued for the next free agent", Bead: b.ID}
 	}
-	r = commanderOwed(b, ctx, "plan", "plan the next step", b.ProgressAt) // owed since the bead last moved
+	what := "plan the next step"
+	if b.Stopped {
+		what = "re-plan the step whose agent it stopped"
+	}
+	r = commanderOwed(b, ctx, "plan", what, b.ProgressAt) // owed since the bead last moved
 	r.Bead = b.ID
 	return r
 }
@@ -264,6 +281,8 @@ func own(b Bead, ctx Context) Result {
 		return Result{Actor: Stuck, Reason: "launch_failed", Who: b.ExecRole, Text: "Stuck: the agent could not start" + suffix(b.LaunchError)}
 	case b.ExitedWithoutReport:
 		return Result{Actor: Stuck, Reason: "exited_without_report", Who: b.ExecRole, Since: b.ExitedAt, Text: "Stuck: the agent stopped without a report"}
+	case b.Executing && b.Cutover:
+		return cutoverResult(b, now)
 	case b.Executing:
 		since := max(b.ExecSince, b.ProgressAt)
 		limit := NoProgressStuck
@@ -273,7 +292,13 @@ func own(b Bead, ctx Context) Result {
 		if since > 0 && now-since > int64(limit/time.Second) {
 			return Result{Actor: Stuck, Reason: "no_progress", Who: b.ExecRole, Since: since, Text: fmt.Sprintf("Stuck: no progress for %s", ago(now-since))}
 		}
-		return Result{Actor: Agent, Reason: "executing", Who: b.ExecRole, Since: b.ExecSince, Text: "Working on " + quoted(b.Title)}
+		text := "Working on " + quoted(b.Title)
+		if b.RunRuntime != "" && b.WantRuntime != "" && b.RunRuntime != b.WantRuntime {
+			// The launch fell back (no account of the asked runtime was free), or
+			// the run predates the step's runtime: either way, say it.
+			text += fmt.Sprintf(" on %s, though the step asks for %s", runtimeName(b.RunRuntime), runtimeName(b.WantRuntime))
+		}
+		return Result{Actor: Agent, Reason: "executing", Who: b.ExecRole, Since: b.ExecSince, Text: text}
 	case b.Unverified:
 		if b.UnverifiedSince > 0 && now-b.UnverifiedSince > int64(UnverifiedStuck/time.Second) {
 			return Result{Actor: Stuck, Reason: "unverified", Who: b.ExecRole, Since: b.UnverifiedSince, Text: "Stuck: claimed, but no agent process is running"}
@@ -553,4 +578,33 @@ func unix(t time.Time) int64 {
 		return 0
 	}
 	return t.Unix()
+}
+
+// cutoverResult is a running agent Commander asked to save its work and stop:
+// working while it does, stuck once it outlives cmdrd's stop.
+func cutoverResult(b Bead, now int64) Result {
+	from := runtimeName(firstNonEmpty(b.CutoverFrom, b.RunRuntime))
+	doing := "Stopping the agent: it is saving its work"
+	if b.CutoverTo != "" {
+		doing = fmt.Sprintf("Switching to %s: %s agent saving its work", runtimeName(b.CutoverTo), from)
+	}
+	waited := now - b.CutoverSince
+	if b.CutoverSince > 0 && waited > int64(CutoverStuck/time.Second) {
+		return Result{Actor: Stuck, Reason: "cutover_stalled", Who: b.ExecRole, Since: b.CutoverSince, Text: fmt.Sprintf("Stuck: the %s agent asked to stop is still running (%s)", from, ago(waited))}
+	}
+	if b.CutoverSince > 0 {
+		doing += " (" + ago(waited) + ")"
+	}
+	return Result{Actor: Agent, Reason: "cutover", Who: b.ExecRole, Since: b.CutoverSince, Text: doing}
+}
+
+// runtimeName is how a runtime reads on the board.
+func runtimeName(rt string) string {
+	switch rt {
+	case "claude":
+		return "Claude"
+	case "codex":
+		return "Codex"
+	}
+	return rt
 }
