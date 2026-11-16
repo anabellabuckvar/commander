@@ -1,0 +1,45 @@
+# Commander engine (cmdrd) in a bounded container.
+#
+# Built for the host's own architecture (arm64 on Apple silicon, amd64 on
+# Linux). The run script (deploy/container/run.sh) puts it in a pod beside
+# PostgreSQL with CPU, memory, pids and disk limits, and publishes the API on
+# the host's loopback only.
+
+ARG GO_VERSION=1.25
+
+FROM docker.io/library/golang:${GO_VERSION}-bookworm AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/cmdr ./cmd/cmdr \
+ && CGO_ENABLED=0 go build -trimpath -o /out/cmdrd ./cmd/cmdrd
+
+# The app's renderer, served by cmdrd at /app/ (the same page the desktop app
+# loads), so a browser on the host can use the containerized engine.
+FROM docker.io/library/node:20-bookworm AS app
+WORKDIR /src/app
+COPY app/package.json app/package-lock.json ./
+RUN ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund
+COPY app/ ./
+RUN npx vite build --config vite.renderer.config.mts && test -f dist/index.html
+
+FROM docker.io/library/debian:bookworm-slim
+# Agents shell out to git, tmux, bash, jq and curl; Claude Code needs Node.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git jq procps tmux nodejs npm \
+ && rm -rf /var/lib/apt/lists/*
+ARG CLAUDE_CODE_VERSION=latest
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
+COPY --from=build /out/cmdr /out/cmdrd /usr/local/bin/
+COPY --from=app /src/app/dist /usr/local/share/commander/app
+RUN useradd --create-home --uid 1000 commander
+USER commander
+ENV HOME=/home/commander \
+    COMMANDER_HOME=/home/commander/.commander \
+    COMMANDER_API_HOST=0.0.0.0 \
+    COMMANDER_APP_DIR=/usr/local/share/commander/app \
+    COMMANDER_APP_DEV_URL=off
+WORKDIR /home/commander
+EXPOSE 8787
+ENTRYPOINT ["/usr/local/bin/cmdrd"]
