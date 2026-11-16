@@ -59,6 +59,13 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"agent question, Commander idle long", open(func(b *Bead) { b.QuestionWaiting = true }), false, time.Hour, Stuck, "commander_idle:answer_question", "Stuck: Commander"},
 		{"launch failed", open(func(b *Bead) { b.LaunchFailed = true; b.LaunchError = "no worktree" }), false, 0, Stuck, "launch_failed", "Stuck: the agent could not start (no worktree)"},
 		{"exited without report", open(func(b *Bead) { b.ExitedWithoutReport = true; b.ExitedAt = ago(time.Minute) }), false, 0, Stuck, "exited_without_report", "Stuck: the agent stopped"},
+		{"agent crashed, Commander owes the next move", open(func(b *Bead) { b.StopReason = "Agent stopped: it crashed (exit code 1)"; b.ProgressAt = ago(time.Hour) }), true, 0, Stuck, "agent_stopped", "Agent stopped: it crashed (exit code 1)"},
+		{"agent crashed, restart queued", open(func(b *Bead) { b.StopReason = "Agent stopped: it crashed; restarting it once"; b.ReadyQueued = true }), false, 0, Agent, "queued", "Agent stopped: it crashed; restarting it once"},
+		{"restarted agent is working again", open(func(b *Bead) {
+			b.StopReason = "Agent stopped: it crashed"
+			b.Executing = true
+			b.ExecSince = ago(time.Minute)
+		}), false, 0, Agent, "executing", "Working on"},
 		{"executing", open(func(b *Bead) { b.Executing = true; b.ExecRole = "operator-exec-1"; b.ExecSince = ago(5 * time.Minute) }), false, 0, Agent, "executing", "Working on"},
 		{"executing with recent progress", open(func(b *Bead) { b.Executing = true; b.ExecSince = ago(time.Hour); b.ProgressAt = ago(time.Minute) }), false, 0, Agent, "executing", "Working on"},
 		{"idle agent with no progress", open(func(b *Bead) { b.Executing = true; b.ExecSince = ago(time.Hour); b.ProgressAt = ago(30 * time.Minute) }), false, 0, Stuck, "no_progress", "Stuck: no progress for 30 minutes"},

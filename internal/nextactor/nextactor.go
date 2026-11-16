@@ -69,6 +69,7 @@ type Bead struct {
 	UnverifiedSince     int64
 	ExitedWithoutReport bool // its agent stopped and left no result
 	ExitedAt            int64
+	StopReason          string // "Agent stopped: ..." when its agent crashed (store.AgentStopped)
 	LaunchFailed        bool
 	LaunchError         string
 	ReadyQueued         bool // marked ready, waiting for capacity
@@ -244,6 +245,9 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 			to := runtimeName(b.CutoverTo)
 			return Result{Actor: Agent, Reason: "cutover_starting", Since: b.CutoverSince, Text: "Switching to " + to + ": starting a " + to + " agent", Bead: b.ID}
 		}
+		if b.StopReason != "" {
+			return Result{Actor: Agent, Reason: "queued", Text: b.StopReason, Bead: b.ID}
+		}
 		return Result{Actor: Agent, Reason: "queued", Text: "Queued for the next free agent", Bead: b.ID}
 	}
 	what := "plan the next step"
@@ -283,6 +287,8 @@ func own(b Bead, ctx Context) Result {
 		return commanderOwed(b, ctx, "answer_question", "answer an agent's question", 0)
 	case b.LaunchFailed:
 		return Result{Actor: Stuck, Reason: "launch_failed", Who: b.ExecRole, Text: "Stuck: the agent could not start" + suffix(b.LaunchError)}
+	case b.StopReason != "" && !b.Executing && !b.Unverified && !b.ReadyQueued:
+		return Result{Actor: Stuck, Reason: "agent_stopped", Who: b.ExecRole, Since: b.ExitedAt, Text: b.StopReason}
 	case b.ExitedWithoutReport:
 		return Result{Actor: Stuck, Reason: "exited_without_report", Who: b.ExecRole, Since: b.ExitedAt, Text: "Stuck: the agent stopped without a report"}
 	case b.Executing && b.Cutover:

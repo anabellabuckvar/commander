@@ -96,6 +96,20 @@ func Decide(f store.SupervisionFact, now time.Time) Decision {
 		}
 		return d
 	}
+	// A crashed agent the automatic restart could not cover is the Commander's
+	// to decide: re-dispatch, repair or re-plan, with the recorded cause.
+	if actor.Reason == "agent_stopped" {
+		d.Reason, d.Action, d.Description = "agent_stopped", "wake", f.ExecutionError
+		d.Target = f.PlanningCommander
+		if d.Target == "" {
+			d.Target = f.SupervisorID
+		}
+		if d.Target == "" {
+			d.Target = "commander"
+		}
+		d.CheckAfter = time.Minute
+		return d
+	}
 	if f.Held || f.Status == beads.StatusDeferred {
 		d.Reason = "held"
 		d.Description = "Paused by recorded direction"

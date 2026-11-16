@@ -184,6 +184,9 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 		n.Cutover, n.CutoverTo, n.CutoverFrom, n.CutoverSince = true, c.To, c.From, c.Since
 	}
 	n.Stopped = !s.ExecutionReady && strings.HasPrefix(s.ExecutionError, store.StoppedByCommander)
+	if strings.HasPrefix(s.ExecutionError, store.AgentStopped) {
+		n.StopReason = s.ExecutionError
+	}
 	if !n.Executing {
 		for _, run := range b.s.ExecutionChecks {
 			if run.ProjectID == pid && run.BeadID == s.BeadID {

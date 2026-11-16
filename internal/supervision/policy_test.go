@@ -162,3 +162,17 @@ func TestInactiveGateObligations(t *testing.T) {
 		}
 	}
 }
+
+func TestCrashedAgentWakesItsPlanningCommanderWithTheCause(t *testing.T) {
+	now := time.Now()
+	f := store.SupervisionFact{BeadID: "b", Title: "Ship it", Status: "open", AgentID: "commander", SupervisorID: "commander", PlanningCommander: "commander-qa", PresenceKnown: true, ProgressAt: now.Add(-time.Hour).Unix(),
+		ExecutionError: store.AgentStopped + "it crashed (signal killed) again after its automatic restart; the Commander decides what happens next"}
+	d := Decide(f, now)
+	if d.Reason != "agent_stopped" || d.Action != "wake" || d.Target != "commander-qa" || d.Description != f.ExecutionError {
+		t.Fatalf("got %+v", d)
+	}
+	f.ExecutionReady, f.ExecutionCapable = true, true // its one restart is queued: nothing to wake
+	if d := Decide(f, now); d.Action == "wake" {
+		t.Fatalf("queued restart woke the Commander: %+v", d)
+	}
+}

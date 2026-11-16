@@ -96,6 +96,9 @@ func beadOf(f store.SupervisionFact) nextactor.Bead {
 	if f.ExecutionError != "" && f.ExecutionAttempts >= 5 {
 		b.LaunchFailed, b.LaunchError = true, f.ExecutionError
 	}
+	if strings.HasPrefix(f.ExecutionError, store.AgentStopped) {
+		b.StopReason = f.ExecutionError
+	}
 	if f.ExecutionReady && !b.Executing && !b.LaunchFailed {
 		if f.ExecutionReserved {
 			b.Unverified, b.UnverifiedSince = true, f.ProgressAt
