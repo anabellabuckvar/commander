@@ -60,6 +60,10 @@ func (f *fakeLinear) server(t *testing.T) *httptest.Server {
 			return
 		}
 		sid, ok := f.state[id]
+		if id == "QA-182" { // a ticket-shaped word that is no ticket: Linear answers with an error
+			_ = json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{"message": "Entity not found: Issue"}}, "data": nil})
+			return
+		}
 		if !ok {
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"issue": nil}})
 			return
@@ -174,5 +178,17 @@ func TestSyncStartsInProgressAndCorrectsItsOwnBlocked(t *testing.T) {
 	}
 	if f.state["T-1"] != "s-progress" || f.state["T-2"] != "s-progress" || f.state["T-3"] != "s-blocked" {
 		t.Fatalf("states = %v", f.state)
+	}
+}
+
+// A ticket-shaped word that is no ticket is skipped; it does not fail the run.
+func TestSyncSkipsIdsLinearDoesNotKnow(t *testing.T) {
+	f := &fakeLinear{state: map[string]string{"T-1": "s-todo"}}
+	srv := f.server(t)
+	defer srv.Close()
+	opts := moverOpts(t, srv)
+	moves, err := Sync(context.Background(), opts, map[string]Target{"QA-182": {Want: WantStarted}, "T-1": {Want: WantStarted}})
+	if err != nil || len(moves) != 1 || f.state["T-1"] != "s-progress" {
+		t.Fatalf("moves %+v err %v states %v", moves, err, f.state)
 	}
 }

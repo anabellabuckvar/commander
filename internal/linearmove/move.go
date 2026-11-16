@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -181,7 +182,7 @@ func Sync(ctx context.Context, opts Options, targets map[string]Target) ([]Move,
 		}
 		m, err := syncOne(ctx, opts, key, id, targets[id], &ledger)
 		if err != nil && firstErr == nil {
-			firstErr = err
+			firstErr = fmt.Errorf("%s: %w", id, err)
 		}
 		if m != nil {
 			moves = append(moves, *m)
@@ -196,6 +197,10 @@ func Sync(ctx context.Context, opts Options, targets map[string]Target) ([]Move,
 }
 
 var errLinear = errors.New("linear: request failed")
+
+// errNotFound: Linear has no issue with that id (a ticket-shaped word in a
+// title, like "QA-182", that is not a ticket). Skipped, not a failure.
+var errNotFound = errors.New("linear: no such issue")
 
 func call(ctx context.Context, opts Options, key, query string, vars map[string]string, out any) error {
 	payload, _ := json.Marshal(map[string]any{"query": query, "variables": vars})
@@ -213,7 +218,13 @@ func call(ctx context.Context, opts Options, key, query string, vars map[string]
 		Errors []json.RawMessage `json:"errors"`
 		Data   json.RawMessage   `json:"data"`
 	}
-	if json.Unmarshal(body, &env) != nil || len(env.Errors) > 0 {
+	if json.Unmarshal(body, &env) != nil {
+		return errLinear
+	}
+	if len(env.Errors) > 0 {
+		if strings.Contains(strings.ToLower(string(env.Errors[0])), "not found") {
+			return errNotFound
+		}
 		return errLinear
 	}
 	if json.Unmarshal(env.Data, out) != nil {
@@ -235,6 +246,9 @@ func syncOne(ctx context.Context, opts Options, key, id string, t Target, ledger
 		} `json:"issue"`
 	}
 	if err := call(ctx, opts, key, issueQuery, map[string]string{"id": id}, &got); err != nil {
+		if errors.Is(err, errNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	is := got.Issue
