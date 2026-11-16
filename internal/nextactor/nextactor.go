@@ -313,8 +313,19 @@ func own(b Bead, ctx Context) Result {
 		if b.ExecWorking {
 			limit = BusyNoProgressStuck // a long build or test run is still a turn in progress
 		}
-		if b.ExecActiveAt > 0 {
-			// The agent's own events say whether it is working: quiet for the
+		if b.ExecActiveAt > 0 && !b.ExecWorking {
+			// Between turns: a recorded wait is what it waits on; otherwise, once
+			// it has sat idle past the limit, telling it what next is the
+			// Commander's move (stuck only if the Commander leaves it there).
+			if w := waits(b, ctx); w.Actor != "" {
+				w.Bead = b.ID
+				return w
+			}
+			if now-b.ExecActiveAt > int64(NoProgressStuck/time.Second) {
+				return commanderOwed(b, ctx, "idle_agent", "tell the idle agent on "+quoted(b.Title)+" what to do next", b.ExecActiveAt+int64(NoProgressStuck/time.Second)) // owed once the idle limit passed
+			}
+		} else if b.ExecActiveAt > 0 {
+			// In a turn, its own events say whether it is working: quiet for the
 			// idle limit is stuck; active but recording nothing for hours is a loop.
 			if now-b.ExecActiveAt > int64(NoProgressStuck/time.Second) {
 				return Result{Actor: Stuck, Reason: "no_progress", Who: b.ExecRole, Since: b.ExecActiveAt, Text: fmt.Sprintf("Stuck: the agent has done nothing for %s", ago(now-b.ExecActiveAt))}

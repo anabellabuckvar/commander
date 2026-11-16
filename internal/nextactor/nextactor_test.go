@@ -434,3 +434,23 @@ func TestAnActiveAgentIsWorkingWhateverTheProgressClock(t *testing.T) {
 		t.Fatalf("no activity clock, 80 min = %s/%s, want no_progress", r.Actor, r.Reason)
 	}
 }
+
+// Track 4.7 on Nov 16: the memory step's agent finished a turn and sat idle,
+// held off dev-6 for the release. Idle with a recorded wait reads that wait;
+// idle with none is the Commander's to answer, not "no progress".
+func TestAnIdleAgentReadsItsWaitOrTheCommandersMove(t *testing.T) {
+	ago := func(d time.Duration) int64 { return now.Add(-d).Unix() }
+	b := Bead{ID: "b", Title: "Memory: cache charts in Postgres", Status: "open", PlanningCommander: "commander",
+		Executing: true, ExecRole: "operator-x", ExecSince: ago(2 * time.Hour), ProgressAt: ago(90 * time.Minute), ExecActiveAt: ago(30 * time.Minute)}
+	if r := Decide(b, ctxWith(true, 0, nil)); r.Actor != Commander || r.Reason != "idle_agent" {
+		t.Fatalf("idle agent, no wait = %s/%s %q, want the Commander's move", r.Actor, r.Reason, r.Text)
+	}
+	b.Waits = []beads.Wait{{Kind: beads.WaitUntil, Ref: "release 2a deployed", Until: now.Add(time.Hour)}}
+	if r := Decide(b, ctxWith(true, 0, nil)); r.Actor != External || !strings.Contains(r.Text, "release 2a deployed") {
+		t.Fatalf("idle agent with a wait = %s %q, want that wait", r.Actor, r.Text)
+	}
+	b.Waits, b.ExecActiveAt = nil, ago(5*time.Minute)
+	if r := Decide(b, ctxWith(true, 0, nil)); r.Actor != Agent {
+		t.Fatalf("agent idle 5 min = %s, want still its own", r.Actor)
+	}
+}
