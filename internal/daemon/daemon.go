@@ -571,6 +571,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				}
 				go describer.Run(ctx)
 				go d.runClosingSweep(ctx)
+				go d.runAutoDispatch(ctx)
 				go d.runPRLinker(ctx)
 				go d.runLinearSync(ctx)
 			}
