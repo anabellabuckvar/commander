@@ -39,10 +39,12 @@ func CanonicalPR(raw string) (string, error) {
 }
 
 type Head struct {
-	SHA    string `json:"headRefOid"`
-	Base   string `json:"baseRefOid"`
-	State  string `json:"state"`
-	Author struct {
+	SHA   string `json:"headRefOid"`
+	Base  string `json:"baseRefOid"`
+	State string `json:"state"`
+	// Mergeable is GitHub's MERGEABLE, CONFLICTING or UNKNOWN.
+	Mergeable string `json:"mergeable"`
+	Author    struct {
 		Login string `json:"login"`
 	} `json:"author"`
 	Checks  []Check `json:"statusCheckRollup"`
@@ -139,7 +141,7 @@ func ReadHead(ctx context.Context, run GHRunner, pr string) (Head, error) {
 	if _, err := CanonicalPR(pr); err != nil {
 		return h, err
 	}
-	out, err := run(ctx, "pr", "view", pr, "--json", "headRefOid,baseRefOid,state,author,statusCheckRollup,commits")
+	out, err := run(ctx, "pr", "view", pr, "--json", "headRefOid,baseRefOid,state,mergeable,author,statusCheckRollup,commits")
 	if err != nil {
 		return h, err
 	}

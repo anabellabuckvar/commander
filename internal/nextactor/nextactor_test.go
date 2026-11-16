@@ -454,3 +454,10 @@ func TestAnIdleAgentReadsItsWaitOrTheCommandersMove(t *testing.T) {
 		t.Fatalf("agent idle 5 min = %s, want still its own", r.Actor)
 	}
 }
+
+func TestAHeldMergeCardWaitsOnItsChecks(t *testing.T) {
+	b := Bead{ID: "m", Title: "Merge PR 3772", Status: "open", PlanningCommander: "commander", MergeWait: "PR #3772's Integration tests (failure)"}
+	if r := Decide(b, ctxWith(true, 0, nil)); r.Actor != External || r.Text != "Waiting on PR #3772's Integration tests (failure)" {
+		t.Fatalf("held merge = %s %q, want waiting on its checks", r.Actor, r.Text)
+	}
+}

@@ -65,9 +65,10 @@ type Bead struct {
 	ExecWorking         bool   // and is in a turn right now (not idle)
 	ExecRole            string // that agent
 	ExecSince           int64
-	ExecActiveAt        int64 // its agent's last hook or tool event (0 = unknown)
-	ProgressAt          int64 // last recorded progress on the bead
-	Unverified          bool  // a claim with no positive process evidence yet
+	ExecActiveAt        int64  // its agent's last hook or tool event (0 = unknown)
+	MergeWait           string // a merge card held until its PR is green and mergeable: what it waits on
+	ProgressAt          int64  // last recorded progress on the bead
+	Unverified          bool   // a claim with no positive process evidence yet
 	UnverifiedSince     int64
 	ExitedWithoutReport bool // its agent stopped and left no result
 	ExitedAt            int64
@@ -295,6 +296,8 @@ func own(b Bead, ctx Context) Result {
 		return Result{Actor: Done, Reason: "ready_to_close", Text: "Complete"}
 	case b.ClosingGate:
 		return Result{Actor: None, Reason: "closing", Text: "Complete once the rest is finished"}
+	case b.MergeWait != "":
+		return Result{Actor: External, Reason: "merge_wait", Text: "Waiting on " + b.MergeWait}
 	case b.NeedsUser:
 		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:

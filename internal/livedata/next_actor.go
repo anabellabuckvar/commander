@@ -154,6 +154,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	if s.ExecutionReady && s.ExecutionEligible && s.ExecutionMode == "active" && strings.HasPrefix(s.ExecutionError, store.UsageCapacityError) {
 		n.UsageCapacity = s.ExecutionError
 	}
+	n.MergeWait = b.s.MergeHeld[project+"\x00"+s.BeadID]
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
 	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {

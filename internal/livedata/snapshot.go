@@ -29,7 +29,10 @@ type Snapshot struct {
 	Executions        []SnapExecution   `json:"executions"`
 	ExecutionChecks   []SnapExecution   `json:"execution_checks,omitempty"` // recorded claims without current positive process evidence
 	PRStates          map[string]string `json:"pr_states,omitempty"`
-	Answers           map[string]int    `json:"answers,omitempty"`
+	// MergeHeld are merge cards kept off NEEDS YOU while their PR is not green
+	// and mergeable (project\x00bead: what they wait on).
+	MergeHeld map[string]string `json:"merge_held,omitempty"`
+	Answers   map[string]int    `json:"answers,omitempty"`
 	// PreserveVersion marks a failed project read served from last-good rows.
 	PreserveVersion bool `json:"-"`
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
@@ -954,6 +957,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	}
 	snap := BuildSnapshot(data, s.unread)
 	RefreshWorkflowHeads(&snap, s.PRHeads)
+	HoldRedMergeCards(&snap, s.PRHeads)
 	if s.PRStates != nil {
 		snap.PRStates = s.PRStates()
 	}
