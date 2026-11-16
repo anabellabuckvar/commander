@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,10 +33,12 @@ type pitchWatcher struct {
 	stale     map[string]bool // successful notices, persisted across restarts
 	stalePath string
 	asked     map[string]int64 // "project:bead" -> unix s the Manager was mailed
+	// merges answers a merge card the user settled by merging on GitHub; nil = off.
+	merges *mergeSettler
 }
 
 func newPitchWatcher(home string, latest func() (livedata.Snapshot, bool), mail func(context.Context, string, string, string) error) *pitchWatcher {
-	w := &pitchWatcher{latest: latest, mail: mail, now: time.Now, seen: map[string]int{}, stale: map[string]bool{}, asked: map[string]int64{}, stalePath: filepath.Join(home, "stale-notices.json")}
+	w := &pitchWatcher{latest: latest, mail: mail, now: time.Now, seen: map[string]int{}, stale: map[string]bool{}, asked: map[string]int64{}, stalePath: filepath.Join(home, "stale-notices.json"), merges: newMergeSettler()}
 	data, err := os.ReadFile(w.stalePath)
 	if err == nil {
 		if err := json.Unmarshal(data, &w.stale); err != nil {
@@ -82,7 +85,7 @@ func (w *pitchWatcher) pass(ctx context.Context) {
 	if !ok || snap.Degraded != nil {
 		return // a stale or empty snapshot would mail (or forget) asks that are fine
 	}
-	w.mailStale(ctx, snap)
+	w.mailStale(ctx, snap, w.merges.settle(ctx, snap))
 	now := map[string]bool{}
 	var due []livedata.NoPitch
 	w.mu.Lock()
@@ -136,7 +139,7 @@ If it is not the user's call after all, re-plan or close the step instead. You a
 
 // mailStale uses the board's flag, so hidden/settled asks are never mailed.
 // A failed send is retried on the next existing watcher pass.
-func (w *pitchWatcher) mailStale(ctx context.Context, snap livedata.Snapshot) {
+func (w *pitchWatcher) mailStale(ctx context.Context, snap livedata.Snapshot, settled map[string]bool) {
 	active := map[string]bool{}
 	for _, card := range snap.NeedsYou {
 		active[livedata.StaleNoticeKey(card)] = true
@@ -156,13 +159,18 @@ func (w *pitchWatcher) mailStale(ctx context.Context, snap livedata.Snapshot) {
 				continue
 			}
 			key := livedata.StaleNoticeKey(card)
-			if w.stale[key] {
+			if w.stale[key] || settled[key] {
 				continue
 			}
+			// The planning Commander holds the card now; a retired Manager's
+			// mailbox would leave the notice unread.
 			role := ""
 			for _, ws := range snap.Workstreams {
 				if ws.Project+"\x00"+ws.Title == card.Project+"\x00"+card.Workstream {
-					role = ws.ManagerRole
+					role = ws.PlanningCommander
+					if role == "" {
+						role = ws.ManagerRole
+					}
 					break
 				}
 			}
@@ -182,7 +190,20 @@ func (w *pitchWatcher) mailStale(ctx context.Context, snap livedata.Snapshot) {
 }
 
 func staleCardMail(a livedata.NeedsYou, why string) (string, string) {
-	return fmt.Sprintf("[stale card] %s: %s", a.BeadID, why), fmt.Sprintf(`The card for %s (%s) is out of date: %s. The user can still answer it. Check the facts before keeping it up.
+	subject := fmt.Sprintf("[stale card] %s: %s", a.BeadID, why)
+	if strings.HasPrefix(why, "PR #") && strings.HasSuffix(why, " merged") {
+		// The board hides a card whose PR merged: the user cannot click it. A
+		// merge by the user is answered by cmdrd itself; this one was not theirs.
+		return subject, fmt.Sprintf(`The card for %s (%s) is hidden from the user: %s, and not by the user, so cmdrd did not answer it. Never tell the user to click this card: they cannot see it.
+
+If the merge settles the ask and the user already said so (chat counts), record their words on the card:
+  cmdr internal-resolve-needs --project %s --bead %s --action decide --choice '<the approving option>' --text '<the user's words, and who merged it>'
+If the user has not said, write the corrected card and ask them once:
+  cmdr internal-set-objective --project %s --bead %s --state needs-user --decision '<corrected decision JSON>'
+If the ask no longer applies, withdraw it:
+  cmdr internal-set-objective --project %s --bead %s --status in-progress`, a.BeadID, a.Project, why, a.Project, a.BeadID, a.Project, a.BeadID, a.Project, a.BeadID)
+	}
+	return subject, fmt.Sprintf(`The card for %s (%s) is out of date: %s. The user can still answer it. Check the facts before keeping it up.
 
 If still right as written, record what you checked (15+ characters):
   cmdr internal-set-objective --project %s --bead %s --card-check still-right --reason '<what you checked>'
