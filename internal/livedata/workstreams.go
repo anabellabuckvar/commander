@@ -251,6 +251,9 @@ func askLists(data Data) ([]NeedsYou, []NoPitch) {
 			if step.Row.Status == "closed" || step.Row.Status == beads.StatusDeferred {
 				continue // finished or parked: out of play
 			}
+			if step.Row.ClosingGate && siblingsOpen(step.Row, ws.Steps) {
+				continue // Confirm done asks only once the rest is finished
+			}
 			if step.Row.State == beads.StateNeedsUser && !(isOpenUserGate(step.Row) && waitsOnOpenStage(step.Row, byID)) {
 				add(step.Row, inTrack(ws, step.Row, needsYouOf(ws, step.Row, i+1)))
 			} else if isOpenUserGate(step.Row) && !waitsOnOthers(step.Row) && !waitsOnOpenStage(step.Row, byID) && !followsOpenSibling(step.Row, ws.Steps, byID) {
@@ -315,6 +318,21 @@ func followsOpenSibling(r ObjectiveRow, steps []NestedObjective, byID map[string
 			return false
 		}
 		if s.Row.ParentBeadID == r.ParentBeadID && s.Row.Status != "closed" && s.Row.State != beads.StateDone && !waitsOn(s.Row, r.BeadID, byID) {
+			return true
+		}
+	}
+	return false
+}
+
+// siblingsOpen: another step under r's parent is unfinished (parked counts:
+// it is not done either); superseded and withdrawn steps are out of the plan.
+func siblingsOpen(r ObjectiveRow, steps []NestedObjective) bool {
+	for _, s := range steps {
+		x := s.Row
+		if x.BeadID == r.BeadID || x.ParentBeadID != r.ParentBeadID || x.Superseded || x.Withdrawn || x.ClosingGate {
+			continue
+		}
+		if x.Status != "closed" && x.State != beads.StateDone {
 			return true
 		}
 	}
