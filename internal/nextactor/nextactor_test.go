@@ -50,12 +50,12 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"held", open(func(b *Bead) { b.Held = true; b.HoldReason = "until the batch lands" }), false, 0, None, "paused", "Paused: until the batch lands"},
 		{"deferred", open(func(b *Bead) { b.Status = beads.StatusDeferred }), false, 0, None, "paused", "Paused"},
 		{"held beats a user ask", open(func(b *Bead) { b.Held = true; b.NeedsUser = true }), false, 0, None, "paused", "Paused"},
-		{"saved answer on held work goes to Commander", open(func(b *Bead) { b.Held = true; b.HumanAnswerPending = true }), true, 0, Commander, "apply_answer", "Commander: apply"},
+		{"saved answer on held work goes to Commander", open(func(b *Bead) { b.Held = true; b.HumanAnswerPending = true }), true, 0, Commander, "apply_answer", "Commander to apply"},
 		{"user decision", open(func(b *Bead) { b.NeedsUser = true; b.UserAsk = "approve the refund guard" }), false, 0, User, "decision", "Needs you: approve the refund guard"},
 		{"user decision beats a running agent", open(func(b *Bead) { b.NeedsUser = true; b.Executing = true }), false, 0, User, "decision", "Needs you"},
 		{"waiting on the user with a recorded ask", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUser}}; b.UserAsk = "pick the rollout day" }), false, 0, User, "waiting_user", "Needs you: pick the rollout day"},
-		{"waiting on the user with nothing asked", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUser}} }), true, 0, Commander, "record_question", "Commander: write down what"},
-		{"agent question, Commander busy", open(func(b *Bead) { b.PendingQuestions = 1 }), true, 0, Commander, "answer_question", "Commander: answer"},
+		{"waiting on the user with nothing asked", open(func(b *Bead) { b.Waits = []beads.Wait{{Kind: beads.WaitUser}} }), true, 0, Commander, "record_question", "Commander to write down what"},
+		{"agent question, Commander busy", open(func(b *Bead) { b.PendingQuestions = 1 }), true, 0, Commander, "answer_question", "Commander to answer"},
 		{"agent question, Commander idle long", open(func(b *Bead) { b.QuestionWaiting = true }), false, time.Hour, Stuck, "commander_idle:answer_question", "Stuck: Commander"},
 		{"launch failed", open(func(b *Bead) { b.LaunchFailed = true; b.LaunchError = "no worktree" }), false, 0, Stuck, "launch_failed", "Stuck: the agent could not start (no worktree)"},
 		{"exited without report", open(func(b *Bead) { b.ExitedWithoutReport = true; b.ExitedAt = ago(time.Minute) }), false, 0, Stuck, "exited_without_report", "Stuck: the agent stopped"},
@@ -66,24 +66,24 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"agent mid-turn far too long", open(func(b *Bead) { b.Executing = true; b.ExecWorking = true; b.ProgressAt = ago(2 * time.Hour) }), false, 0, Stuck, "no_progress", "Stuck: no progress for 2 hours"},
 		{"claim just made", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(time.Minute) }), false, 0, Agent, "starting", "Starting an agent"},
 		{"claim with no process", open(func(b *Bead) { b.Unverified = true; b.UnverifiedSince = ago(10 * time.Minute) }), false, 0, Stuck, "unverified", "Stuck: claimed"},
-		{"result to review, Commander busy", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), true, 0, Commander, "review_result", "Commander: review"},
+		{"result to review, Commander busy", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), true, 0, Commander, "review_result", "Commander to review"},
 		{"result left unreviewed while Commander is busy elsewhere", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Hour) }), true, 0, Stuck, "commander_idle:review_result", "Stuck: Commander has not got to review the finished result in"},
 		{"result to review, Commander just idle", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Minute) }), false, time.Minute, Commander, "review_result", "Commander to review"},
 		{"result unreviewed for long", open(func(b *Bead) { b.ResultReady = true; b.ResultSince = ago(time.Hour) }), false, time.Hour, Stuck, "commander_idle:review_result", "Stuck: Commander"},
 		{"waiting on CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci} }), false, 0, External, "wait:ci", "Waiting on CI #42"},
 		{"waiting on a reviewer", open(func(b *Bead) { b.Waits = []beads.Wait{review} }), false, 0, External, "wait:review", "Waiting on review by alex"},
 		{"waiting for a date", open(func(b *Bead) { b.Waits = []beads.Wait{future} }), false, 0, External, "wait:until", "Waiting on rollout window"},
-		{"a date that passed is owed", open(func(b *Bead) { b.Waits = []beads.Wait{past} }), true, 0, Commander, "wait_over", "Commander: act on"},
+		{"a date that passed is owed", open(func(b *Bead) { b.Waits = []beads.Wait{past} }), true, 0, Commander, "wait_over", "Commander to act on"},
 		{"a date long passed, Commander busy elsewhere", open(func(b *Bead) {
 			b.Waits = []beads.Wait{{Kind: beads.WaitUntil, Ref: "rollout window", Until: now.Add(-time.Hour)}}
 		}), true, 0, Stuck, "commander_idle:wait_over", "Stuck: Commander has not got to act on"},
-		{"legacy Manager handoff is Commander's", open(func(b *Bead) { b.Waits = []beads.Wait{handoff} }), true, 0, Commander, "wait_over", "Commander: act on"},
+		{"legacy Manager handoff is Commander's", open(func(b *Bead) { b.Waits = []beads.Wait{handoff} }), true, 0, Commander, "wait_over", "Commander to act on"},
 		{"user wait beats CI", open(func(b *Bead) { b.Waits = []beads.Wait{ci, {Kind: beads.WaitUser}}; b.UserAsk = "approve" }), false, 0, User, "waiting_user", "Needs you"},
 		{"queued for capacity", open(func(b *Bead) { b.ReadyQueued = true }), false, 0, Agent, "queued", "Queued"},
 		{"ready but nothing can run it", open(func(b *Bead) { b.ReadyQueued = true; b.NoCapableSlot = true }), false, 0, Stuck, "no_capable_slot", "Stuck: no agent slot"},
 		{"parent carried by children", open(func(b *Bead) { b.HasOpenChildren = true }), false, 0, None, "children", "Carried"},
 		{"parent with its own user ask", open(func(b *Bead) { b.HasOpenChildren = true; b.NeedsUser = true }), false, 0, User, "decision", "Needs you"},
-		{"nothing recorded, Commander busy", open(func(b *Bead) {}), true, 0, Commander, "plan", "Commander: plan"},
+		{"nothing recorded, Commander busy", open(func(b *Bead) {}), true, 0, Commander, "plan", "Commander to plan"},
 		{"nothing recorded for an hour, Commander busy elsewhere", open(func(b *Bead) { b.ProgressAt = ago(time.Hour) }), true, 0, Stuck, "commander_idle:plan", "Stuck: Commander has not got to plan the next step in"},
 		{"nothing recorded, Commander idle long", open(func(b *Bead) {}), false, time.Hour, Stuck, "commander_idle:plan", "Stuck: Commander has not started to plan"},
 	}
@@ -341,7 +341,7 @@ func TestCutoverReadsAsTheSwitchInProgress(t *testing.T) {
 		{"running on the asked runtime", running(func(b *Bead) { b.RunRuntime = "claude" }),
 			Agent, "executing", "Working on \u201cMake the read fast\u201d"},
 		{"stopped, Commander re-plans", Bead{ID: "b", Title: "Make the read fast", Status: "open", Stopped: true, PlanningCommander: "commander"},
-			Commander, "plan", "Commander: re-plan the step whose agent it stopped"},
+			Commander, "plan", "Commander to re-plan the step whose agent it stopped"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -350,5 +350,17 @@ func TestCutoverReadsAsTheSwitchInProgress(t *testing.T) {
 				t.Fatalf("got %+v, want %s %s %q", r, c.actor, c.reason, c.text)
 			}
 		})
+	}
+}
+
+func TestCommanderOnTheBeadIsActiveOtherwiseOwed(t *testing.T) {
+	b := Bead{ID: "b", Title: "Ship the guard", Status: "open", PlanningCommander: "commander", ResultReady: true, ResultSince: now.Add(-time.Minute).Unix()}
+	c := ctxWith(true, 0, nil)
+	if r := Decide(b, c); r.Active || r.Text != "Commander to review the finished result" {
+		t.Fatalf("busy elsewhere only owes it: %+v", r)
+	}
+	c.CommanderOn = func(who, bead string) bool { return who == "commander" && bead == "b" }
+	if r := Decide(b, c); !r.Active || r.Actor != Commander || r.Text != "Commander: review the finished result" {
+		t.Fatalf("on this bead it is doing it: %+v", r)
 	}
 }

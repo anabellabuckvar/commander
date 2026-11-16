@@ -96,6 +96,9 @@ type Context struct {
 	// Commander reports whether a planning Commander is in a turn now and,
 	// if not, since when it has been idle (unix s; 0 = unknown).
 	Commander func(id string) (busy bool, idleSince int64)
+	// CommanderOn reports whether the Commander's current activity is about
+	// this bead. Being in a turn is not that: one chat carries every workstream.
+	CommanderOn func(who, bead string) bool
 	// Lookup resolves a blocking bead. Nil means chains are not followed:
 	// a blocked bead then reads as Actor None, reason "dependency".
 	Lookup func(id string) (Bead, bool)
@@ -106,6 +109,7 @@ type Context struct {
 
 // Result is the decision for one bead.
 type Result struct {
+	Active bool     `json:"active,omitempty"` // the Commander is doing this move right now, not only owing it
 	Actor  Actor    `json:"actor"`
 	Reason string   `json:"reason"`        // stable machine code
 	Who    string   `json:"who,omitempty"` // the person, CI target, agent or Commander
@@ -396,11 +400,14 @@ func commanderOwed(b Bead, ctx Context, reason, what string, since int64) Result
 	if ctx.Commander != nil {
 		busy, idleSince = ctx.Commander(who)
 	}
+	if busy && ctx.CommanderOn != nil && ctx.CommanderOn(who, b.ID) {
+		return Result{Actor: Commander, Reason: reason, Who: who, Since: since, Text: "Commander: " + what, Active: true}
+	}
 	if busy {
 		if since > 0 && ctx.Now.Unix()-since > int64(CommanderBusyStuck/time.Second) {
 			return Result{Actor: Stuck, Reason: "commander_idle:" + reason, Who: who, Since: since, Text: fmt.Sprintf("Stuck: Commander has not got to %s in %s (busy with other work)", what, ago(ctx.Now.Unix()-since))}
 		}
-		return Result{Actor: Commander, Reason: reason, Who: who, Since: since, Text: "Commander: " + what}
+		return Result{Actor: Commander, Reason: reason, Who: who, Since: since, Text: "Commander to " + what}
 	}
 	waiting := max(since, idleSince)
 	if waiting > 0 && ctx.Now.Unix()-waiting > int64(CommanderIdleStuck/time.Second) {

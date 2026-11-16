@@ -85,13 +85,16 @@ func actorLine(row nextactor.Row) line {
 		nextactor.User:      "needs",
 		nextactor.Stuck:     "stuck",
 		nextactor.Agent:     "working",
-		nextactor.Commander: "working",
+		nextactor.Commander: "waiting", // owed; green only while it is doing this move
 		nextactor.External:  "waiting",
 		nextactor.Done:      "done",
 		nextactor.None:      "quiet",
 	}[row.Lead.Actor]
 	// "why" draws a warning icon in the sidebar; a blocking chain is not a
 	// warning (it stays on the row's Actor for anyone who wants it).
+	if row.Lead.Actor == nextactor.Commander && row.Lead.Active {
+		kind = "working"
+	}
 	if waitsOnAnotherStep(row.Lead) {
 		kind = "waiting"
 	}
@@ -119,6 +122,10 @@ func (b board) actorContext(project string, pid int64, commander string) nextact
 				return true, 0
 			}
 			return false, a.Since
+		},
+		CommanderOn: func(who, bead string) bool {
+			a, ok := b.s.Agents[who]
+			return ok && a.State == store.AgentWorking && bead != "" && strings.Contains(a.Detail, bead)
 		},
 		Lookup: func(id string) (nextactor.Bead, bool) {
 			s, ok := b.projectSteps[project][id]
