@@ -27,7 +27,7 @@ export function LinearSettings() {
   }
   return <section className="linear-settings">
     <h4>Linear</h4>
-    <p className="settings-note">Reads your active-cycle tickets, read only. Commander never changes tickets.</p>
+    <p className="settings-note">Reads your active-cycle tickets, and moves tickets linked to board rows forward as their work starts and finishes. It never moves one back, and leaves alone a ticket someone else changed.</p>
     <p role="status">Key: {saved ? 'saved' : 'not set'}</p>
     <form onSubmit={(e) => { e.preventDefault(); void send(false) }}>
       <label>Linear API key <input ref={input} type="password" autoComplete="off" spellCheck={false} aria-label="Linear API key" disabled={busy} /></label>

@@ -68,7 +68,7 @@ func TestWrongLinearLinesTellCommanderToUpdateLinearItself(t *testing.T) {
 		all = append(all, w)
 	}
 	for _, e := range wrongEntries(all) {
-		want := ". Update the ticket's status in Linear yourself to match the work (decision d27)."
+		want := ". cmdrd moves linked tickets forward as work starts and finishes; if this one is still wrong, update its status in Linear yourself to match the work (decision d27)."
 		if e.ID == "wrong:ticket-done:TEAM-2" {
 			want = ". Check whether the work or the ticket is out of date, and fix that one (decision d27)."
 		}
@@ -186,5 +186,30 @@ func TestWrongOnScreenChainsScenario(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestWrongNamesATrackWithNoTicket(t *testing.T) {
+	ws := livedata.SnapWorkstream{Project: "p", BeadID: "a", Title: "Jobs (TEAM-1)", Steps: []livedata.SnapStep{
+		{BeadID: "a.1", Title: "One Grafana", Track: true, Status: "open"},
+		{BeadID: "a.2", Title: "Alerts (TEAM-2)", Track: true, Status: "open"},
+		{BeadID: "a.3", Title: "Labelled", Track: true, Status: "open", Tickets: []string{"TEAM-3"}},
+		{BeadID: "a.4", Title: "Parked", Track: true, Status: "deferred"},
+	}}
+	d := livedata.Display{Workstreams: []livedata.BoardRow{{Key: "p:a", Project: "p", BeadID: "a", N: 6, Title: ws.Title, Tracks: []livedata.BoardTrack{
+		{BeadID: "a.1", Letter: ".1", Title: "One Grafana"}, {BeadID: "a.2", Letter: ".2", Title: "Alerts"}, {BeadID: "a.3", Letter: ".3", Title: "Labelled"}, {BeadID: "a.4", Letter: ".4", Title: "Parked"},
+	}}}}
+	got := map[string]livedata.SnapWrong{}
+	for _, w := range wrongOnScreen(d, []livedata.SnapWorkstream{ws}, linearsync.Response{State: "ok"}, t.TempDir(), time.Now()) {
+		got[w.Key] = w
+	}
+	w, ok := got["no-ticket:p:a.1"]
+	if !ok || w.Text != "#6.1 One Grafana has no Linear ticket. Commander needs to find or file it" || w.Target != "p:a" {
+		t.Fatalf("track without a ticket: %+v (all %+v)", w, got)
+	}
+	for _, k := range []string{"no-ticket:p:a.2", "no-ticket:p:a.3", "no-ticket:p:a.4", "no-ticket:p:a"} {
+		if _, on := got[k]; on {
+			t.Errorf("%s listed", k)
+		}
 	}
 }

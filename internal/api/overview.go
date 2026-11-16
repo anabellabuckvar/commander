@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/example-user/commander/internal/linearapi"
+	"github.com/example-user/commander/internal/linearmove"
 	"github.com/example-user/commander/internal/linearsync"
 	"io"
 	"net/http"
@@ -632,6 +633,7 @@ func overviewLinearTickets(home string, ws livedata.SnapWorkstream, track string
 	if len(ids) > 4 {
 		ids = ids[:4]
 	}
+	ledger := linearmove.ReadLedger(home)
 	var out []overview.Evidence
 	for _, id := range ids {
 		linearTickets.Lock()
@@ -645,6 +647,11 @@ func overviewLinearTickets(home string, ws livedata.SnapWorkstream, track string
 		}
 		if e.text != "" {
 			out = append(out, overview.Evidence{ID: "linear-" + id, Label: "Linear ticket " + id + ": the user's own problem statement, measurements and acceptance criteria", Text: e.text})
+		}
+		if moves := ledger.MovesFor(id); len(moves) > 0 {
+			m := moves[len(moves)-1]
+			out = append(out, overview.Evidence{ID: "linear-move-" + id, Label: "Linear status change made by cmdrd", At: m.At.UTC().Format("2006-01-02T15:04:05Z"),
+				Text: fmt.Sprintf("Moved %s from %s to %s because %s", id, m.From, m.To, m.Why)})
 		}
 	}
 	return out

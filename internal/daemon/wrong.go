@@ -19,7 +19,7 @@ import (
 
 // linearSelfFix ends Commander's Linear lines: per standing decision d27,
 // Commander updates the ticket's status in Linear itself instead of asking the user.
-const linearSelfFix = "Update the ticket's status in Linear yourself to match the work (decision d27)."
+const linearSelfFix = "cmdrd moves linked tickets forward as work starts and finishes; if this one is still wrong, update its status in Linear yourself to match the work (decision d27)."
 
 // ticketDoneSelfFix ends Commander's ticket-done line: a Done ticket beside open
 // steps may mean the work or the ticket is stale, so Commander checks which first.
@@ -102,10 +102,22 @@ func wrongOnScreen(d livedata.Display, workstreams []livedata.SnapWorkstream, sp
 				linear("linear:"+i.ID, target, fmt.Sprintf("%s %s is %s in Linear, but an agent is working on it", i.ID, i.Title, i.StatusName), ". Update it in Linear", linearSelfFix)
 			}
 		}
+		raw := map[string]livedata.SnapWorkstream{}
 		for _, ws := range workstreams {
 			key := ws.Project + ":" + ws.BeadID
+			raw[key] = ws
 			if r, on := rows[key]; on && len(livedata.WorkstreamTickets(ws)) == 0 {
 				linear("no-ticket:"+key, key, fmt.Sprintf("#%d %s has no Linear ticket", r.N, plain(r.Title)), ". Commander needs to find or file it", noTicketSelfFix)
+			}
+		}
+		// Each track is its own piece of work and carries its own ticket.
+		for _, w := range d.Workstreams {
+			for _, t := range w.AllTracks() {
+				s := findTrackStep(raw[w.Key].Steps, t.BeadID)
+				if s == nil || s.Superseded || s.Withdrawn || s.Status == "closed" || s.Status == "deferred" || len(stepTickets(s.Title, s.Tickets)) > 0 {
+					continue
+				}
+				linear("no-ticket:"+w.Project+":"+t.BeadID, w.Key, fmt.Sprintf("#%d%s %s has no Linear ticket", w.N, t.Letter, plain(t.Title)), ". Commander needs to find or file it", noTicketSelfFix)
 			}
 		}
 	}
@@ -119,6 +131,18 @@ func wrongOnScreen(d livedata.Display, workstreams []livedata.SnapWorkstream, sp
 		add("gate:"+g.Gate, target, fmt.Sprintf("Agents on %s tried to start before its plan was approved. Approve the plan, or tell its planning Commander to wait", name))
 	}
 	return out
+}
+
+func findTrackStep(steps []livedata.SnapStep, id string) *livedata.SnapStep {
+	for i := range steps {
+		if steps[i].BeadID == id {
+			return &steps[i]
+		}
+		if s := findTrackStep(steps[i].Children, id); s != nil {
+			return s
+		}
+	}
+	return nil
 }
 
 // A canonical why-chain explains the row; it is not itself an error. Legacy
