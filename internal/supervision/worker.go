@@ -1,10 +1,12 @@
 package supervision
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -246,35 +248,52 @@ func (w *Worker) Pass(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Prompt is the one queue message for role: every item due now, oldest first,
+// numbered, so a turn can work down it instead of answering a stream of nudges.
 func Prompt(role string, batch []pending) string {
+	return promptAt(role, batch, time.Now())
+}
+
+func promptAt(role string, batch []pending, now time.Time) string {
+	batch = slices.Clone(batch)
+	slices.SortStableFunc(batch, func(a, b pending) int { return cmp.Compare(a.f.Job.OpenedAt, b.f.Job.OpenedAt) })
 	var b strings.Builder
-	fmt.Fprintf(&b, "Commander supervision: responsibility needs attention for %s. This is internal recovery, not a new user instruction or approval. Read current beads first; respect all holds, waits and authority gates. Acknowledge a current request using the command shown immediately before handling that bead, then review/advance the work or record the concrete legitimate blocker. Mail delivery or acknowledgement alone does not complete the obligation.\n", role)
-	for i, p := range batch {
-		if i == 16 {
-			b.WriteString("Additional obligations will follow in a bounded batch.\n")
-			break
+	n := min(len(batch), 16)
+	fmt.Fprintf(&b, "Commander queue for %s: %d %s you, oldest first. This is internal recovery, not a new user instruction or approval. Read current beads first; respect all holds, waits and authority gates. Work down the list: acknowledge each with its command just before handling it, then review/advance the work or record the concrete legitimate blocker. Acknowledging alone does not complete it.\n", role, len(batch), plural(len(batch), "thing needs", "things need"))
+	for i, p := range batch[:n] {
+		waiting := ""
+		if p.f.Job.OpenedAt > 0 {
+			waiting = fmt.Sprintf(" (waiting %s)", now.Sub(time.Unix(p.f.Job.OpenedAt, 0)).Round(time.Minute))
 		}
-		fmt.Fprintf(&b, "- %s: %s. %s. Assignment generation %d, progress generation %d. Acknowledge: cmdr supervision acknowledge --project-id %d --bead %s --epoch %d --request %s\n", p.f.BeadID, p.f.Title, p.d.Description, p.f.Epoch, p.f.ProgressSeq, p.f.ProjectID, p.f.BeadID, p.f.Epoch, p.f.Job.RequestID)
+		fmt.Fprintf(&b, "%d. %s: %s. %s%s. Assignment generation %d, progress generation %d. Acknowledge: cmdr supervision acknowledge --project-id %d --bead %s --epoch %d --request %s\n", i+1, p.f.BeadID, p.f.Title, p.d.Description, waiting, p.f.Epoch, p.f.ProgressSeq, p.f.ProjectID, p.f.BeadID, p.f.Epoch, p.f.Job.RequestID)
 		if p.f.PendingHumanAnswer {
 			quote := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "'\"'\"'") + "'" }
 			fmt.Fprintf(&b, "  A human answer is already saved. Resume that immutable answer with: cmdr internal-resolve-needs --project %s --bead %s --action decide --resume-only. Supply no new choice or text. If its scope changed, inspect both saved history and current conditions with cmdr decision inspect --project-id %d --bead %s. Only for an obsolete/unverifiable scope, prepare an exact current decision and use cmdr decision reconcile --file PATH; it preserves the old answer and all holds, never renews approval. A still-applicable answer must be resumed rather than asked again.\n", quote(p.f.ProjectName), quote(p.f.BeadID), p.f.ProjectID, quote(p.f.BeadID))
 		}
 	}
+	if len(batch) > n {
+		fmt.Fprintf(&b, "%d more follow in the next message.\n", len(batch)-n)
+	}
 	return b.String()
 }
 
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
 // repeatBackoff spaces out an obligation delivered again with nothing changed:
-// a minute, then 5, 15 and 60 minutes, then every 4 hours. Progress or a new
-// assignment generation starts a new obligation with no attempts.
+// once more after 15 minutes, then hourly, then every 4 hours. Repeating it
+// every minute only buried the queue. Progress or a new assignment generation
+// starts a new obligation with no attempts.
 func repeatBackoff(attempts int64) time.Duration {
 	switch {
-	case attempts <= 2:
-		return time.Minute
-	case attempts == 3:
-		return 5 * time.Minute
-	case attempts == 4:
+	case attempts <= 1:
 		return 15 * time.Minute
-	case attempts == 5:
+	case attempts <= 3:
 		return time.Hour
 	default:
 		return 4 * time.Hour

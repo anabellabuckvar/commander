@@ -129,7 +129,7 @@ func TestIncompleteRequiredRetirementIsReconciledByCurrentCommander(t *testing.T
 }
 
 func TestRepeatBackoffSpacesOutUnchangedObligations(t *testing.T) {
-	want := []time.Duration{time.Minute, time.Minute, time.Minute, 5 * time.Minute, 15 * time.Minute, time.Hour, 4 * time.Hour, 4 * time.Hour}
+	want := []time.Duration{15 * time.Minute, 15 * time.Minute, time.Hour, time.Hour, 4 * time.Hour, 4 * time.Hour}
 	for attempts, d := range want {
 		if got := repeatBackoff(int64(attempts)); got != d {
 			t.Fatalf("attempts %d: %s, want %s", attempts, got, d)
