@@ -329,12 +329,16 @@ func overviewInput(ws livedata.SnapWorkstream, track string) (overview.Input, bo
 		in.Goal = found.Title
 		steps = []livedata.SnapStep{*found}
 	}
-	add := func(id, label string, v any) {
+	add := func(id, label string, v any, at int64) {
 		b, _ := json.Marshal(v)
-		in.Evidence = append(in.Evidence, overview.Evidence{ID: id, Label: label, Text: string(b)})
+		e := overview.Evidence{ID: id, Label: label, Text: string(b)}
+		if at > 0 {
+			e.At = time.Unix(at, 0).UTC().Format("2006-01-02T15:04:05Z")
+		}
+		in.Evidence = append(in.Evidence, e)
 	}
 	if track == "" {
-		add("scope", "Recorded workstream outcome", map[string]string{"title": ws.Title, "status": ws.Status, "note": trimOverview(ws.Note, 4000)})
+		add("scope", "Recorded workstream outcome", map[string]string{"title": ws.Title, "status": ws.Status, "note": trimOverview(ws.Note, 4000)}, 0)
 	}
 
 	// Prefer current/open work so a long history cannot crowd the live blocker out.
@@ -343,7 +347,7 @@ func overviewInput(ws livedata.SnapWorkstream, track string) (overview.Input, bo
 	var walk func([]livedata.SnapStep, string)
 	walk = func(list []livedata.SnapStep, parent string) {
 		for _, st := range list {
-			if st.Task || st.Superseded {
+			if st.Task || st.Superseded || (st.Status == beads.StatusDeferred && st.BeadID != ws.NowStep) {
 				continue
 			}
 			parentOf[st.BeadID] = parent
@@ -384,16 +388,22 @@ func overviewInput(ws livedata.SnapWorkstream, track string) (overview.Input, bo
 		}
 		return 3
 	}
-	sort.SliceStable(candidates, func(i, j int) bool { return priority(candidates[i]) < priority(candidates[j]) })
+	sort.SliceStable(candidates, func(i, j int) bool {
+		pi, pj := priority(candidates[i]), priority(candidates[j])
+		if pi != pj {
+			return pi < pj
+		}
+		return pi == 3 && candidates[i].ProgressAt > candidates[j].ProgressAt // finished: newest first
+	})
 	finished := overviewFinishedTasks(steps, priority)
 	for _, st := range candidates {
 		if len(in.Evidence) >= overviewMaxEvidence-len(finished) {
 			break
 		}
-		add(st.BeadID, st.Title, overviewStepRecord(st, parentOf[st.BeadID], known))
+		add(st.BeadID, st.Title, overviewStepRecord(st, parentOf[st.BeadID], known), st.ProgressAt)
 	}
 	for _, f := range finished {
-		add(f.task.BeadID, f.task.Title, map[string]any{"kind": "finished Operator task", "title": f.task.Title, "part_of": f.parent, "outcome": f.task.CloseReason})
+		add(f.task.BeadID, f.task.Title, map[string]any{"kind": "finished Operator task", "title": f.task.Title, "part_of": f.parent, "outcome": f.task.CloseReason}, f.task.ProgressAt)
 	}
 	return in, true
 }
@@ -403,6 +413,9 @@ const (
 	// overviewMaxFinished bounds the finished Operator tasks the reader sees: their
 	// close reasons are often the only record of what a step's work found.
 	overviewMaxFinished = 12
+	// overviewRecent is how far back a finished task or a chat message still
+	// counts as news; older ones crowded out this week's results.
+	overviewRecent = 7 * 24 * time.Hour
 )
 
 type overviewBead struct {
@@ -427,7 +440,7 @@ func overviewFinishedTasks(steps []livedata.SnapStep, priority func(livedata.Sna
 			if st.Superseded {
 				continue
 			}
-			if st.Task && st.Status == "closed" && strings.TrimSpace(st.CloseReason) != "" {
+			if st.Task && st.Status == "closed" && strings.TrimSpace(st.CloseReason) != "" && (st.ProgressAt == 0 || time.Since(time.Unix(st.ProgressAt, 0)) < overviewRecent) {
 				f := overviewFinished{task: st, rank: 3, order: len(out)}
 				if parent != nil {
 					f.parent, f.rank = parent.Title, priority(*parent)
@@ -490,6 +503,9 @@ func overviewMessages(home, role, track string) []overview.Evidence {
 		// Track recaps cannot borrow an unrelated track's Manager narrative.
 		if track != "" && !strings.Contains(e.Text, track) {
 			continue
+		}
+		if !e.Time.IsZero() && time.Since(e.Time) > 3*24*time.Hour {
+			continue // an old report is not the state now
 		}
 		out = append(out, overview.Evidence{ID: fmt.Sprintf("chat:%d", e.Seq), Label: "Manager report (not independently verified)", Text: trimOverview(e.Text, 4000), At: e.Time.UTC().Format("2006-01-02T15:04:05Z")})
 	}

@@ -60,7 +60,8 @@ func TestOverviewMessagesSkipToolsAndCrossTrackNarrative(t *testing.T) {
 	os.MkdirAll(filepath.Join(h, "chat"), 0700)
 	lines := `{"kind":"tool_result","seq":1,"text":"secret tool data"}
 {"kind":"text","seq":2,"text":"track-b payroll has changed"}
-{"kind":"text","seq":3,"text":"track-a button published","time":"2026-11-04T01:00:00Z"}
+{"kind":"text","seq":3,"text":"track-a button published","time":"` + time.Now().UTC().Add(-time.Hour).Format(time.RFC3339) + `"}
+{"kind":"text","seq":4,"text":"track-a stood down, board unavailable","time":"2026-11-01T01:00:00Z"}
 `
 	os.WriteFile(filepath.Join(h, "chat", "manager-w.jsonl"), []byte(lines), 0600)
 	got := overviewMessages(h, "manager-w", "track-a")
@@ -251,3 +252,35 @@ func TestOverviewStreamsDraftThenRecap(t *testing.T) {
 		t.Fatalf("draft=%v states=%v", sawDraft, states)
 	}
 }
+
+// This week's results come first and carry their date; parked plans and month-old
+// task outcomes do not reach the reader.
+func TestOverviewEvidenceIsRecentAndDated(t *testing.T) {
+	now := time.Now().Unix()
+	ws := livedata.SnapWorkstream{Project: "p", BeadID: "w", Title: "Speed"}
+	for i := 0; i < 60; i++ {
+		ws.Steps = append(ws.Steps, livedata.SnapStep{BeadID: fmt.Sprint("old-", i), Status: "closed", Title: "Old setup", ProgressAt: now - 30*86400 + int64(i)})
+	}
+	ws.Steps = append(ws.Steps,
+		livedata.SnapStep{BeadID: "measured", Status: "closed", Title: "Measure worklists at peak", CloseReason: "p95 726 ms", ProgressAt: now - 3600},
+		livedata.SnapStep{BeadID: "parked", Status: "deferred", Title: "Caesar route"},
+		livedata.SnapStep{BeadID: "s", Title: "Step", Status: "closed", ProgressAt: now - 7200, Children: []livedata.SnapStep{
+			{BeadID: "s.old", Task: true, Status: "closed", Title: "Ancient run", CloseReason: "found nothing", ProgressAt: now - 30*86400},
+		}})
+	in, _ := overviewInput(ws, "")
+	ids := map[string]overviewEvidenceAt{}
+	for _, e := range in.Evidence {
+		ids[e.ID] = overviewEvidenceAt(e.At)
+	}
+	if at, ok := ids["measured"]; !ok || at == "" {
+		t.Fatalf("this week's result missing or undated: %v", ids)
+	}
+	if _, ok := ids["parked"]; ok {
+		t.Fatal("a parked step reached the reader")
+	}
+	if _, ok := ids["s.old"]; ok {
+		t.Fatal("a month-old task outcome reached the reader")
+	}
+}
+
+type overviewEvidenceAt string
