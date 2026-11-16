@@ -207,8 +207,10 @@ func recordQuestion(b Bead, ctx Context) Result {
 func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	r := own(b, ctx)
 	// A card is the user's move only once what it waits on is done: until
-	// then it waits on its blocker.
-	if r.Actor == User && len(b.BlockedBy) > 0 {
+	// then it waits on its blocker. The same holds for a finished or stopped
+	// run with an open blocker: the blocker is the follow-up the Commander
+	// planned in answer to that run, so the step waits on it, not on a review.
+	if (r.Actor == User || answeredByBlocker(r)) && len(b.BlockedBy) > 0 {
 		if ctx.Lookup == nil {
 			return Result{Actor: None, Reason: "dependency", Text: "Waiting on another step", Bead: b.ID}
 		}
@@ -257,6 +259,16 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	r = commanderOwed(b, ctx, "plan", what, b.ProgressAt) // owed since the bead last moved
 	r.Bead = b.ID
 	return r
+}
+
+// answeredByBlocker: a run outcome (a result to review, a stop, an exit with
+// no report) that an open blocker on the same step supersedes.
+func answeredByBlocker(r Result) bool {
+	switch strings.TrimPrefix(r.Reason, "commander_idle:") {
+	case "review_result", "agent_stopped", "exited_without_report":
+		return true
+	}
+	return false
 }
 
 // own is the decision from b's own facts, or Actor "" when they settle nothing.

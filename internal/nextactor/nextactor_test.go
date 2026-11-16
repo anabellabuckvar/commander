@@ -371,3 +371,37 @@ func TestCommanderOnTheBeadIsActiveOtherwiseOwed(t *testing.T) {
 		t.Fatalf("on this bead it is doing it: %+v", r)
 	}
 }
+
+// Track 3.5 on Nov 16: the live check (14.6) finished with an unaccepted
+// result, and the Commander answered it with a fix step (14.14) that now
+// blocks it and has a running agent. The track read orange "Stuck: Commander
+// has not got to review the finished result"; it is the fix being worked.
+func TestRunOutcomeWithAPlannedFollowUpWaitsOnIt(t *testing.T) {
+	fix := Bead{ID: "fix", Title: "Fix forge-lib notify for apps", Status: "open", PlanningCommander: "commander",
+		Executing: true, ExecWorking: true, ExecRole: "operator-x", ExecSince: now.Add(-30 * time.Minute).Unix(), ProgressAt: now.Add(-time.Minute).Unix()}
+	for _, outcome := range []func(*Bead){
+		func(b *Bead) { b.ResultReady = true; b.ResultSince = now.Add(-31 * time.Minute).Unix() },
+		func(b *Bead) {
+			b.StopReason = "Agent stopped: it crashed (exit code 1)"
+			b.ExitedAt = now.Add(-31 * time.Minute).Unix()
+		},
+		func(b *Bead) { b.ExitedWithoutReport = true; b.ExitedAt = now.Add(-31 * time.Minute).Unix() },
+	} {
+		check := Bead{ID: "check", Title: "Live check of the forge-lib notification functions", Status: "open", PlanningCommander: "commander", BlockedBy: []string{"fix"}}
+		outcome(&check)
+		ctx := ctxWith(true, 0, map[string]Bead{"fix": fix, "check": check})
+		got := Decide(check, ctx)
+		if got.Actor != Agent || !strings.HasPrefix(got.Reason, "blocked:") {
+			t.Fatalf("check with a running follow-up = %s/%s %q, want it waiting on the fix's agent", got.Actor, got.Reason, got.Text)
+		}
+		row := Rollup([]Result{Decide(fix, ctx), got})
+		if row.Lead.Actor != Agent || len(row.Lead.Via) != 0 || !strings.Contains(row.Lead.Text, "Fix forge-lib notify") {
+			t.Fatalf("track lead = %s %q via %v, want the fix being worked", row.Lead.Actor, row.Lead.Text, row.Lead.Via)
+		}
+	}
+	// With no open blocker the result is still the Commander's to review.
+	alone := Bead{ID: "check", Title: "Live check", Status: "open", PlanningCommander: "commander", ResultReady: true, ResultSince: now.Add(-time.Minute).Unix()}
+	if got := Decide(alone, ctxWith(true, 0, nil)); got.Reason != "review_result" {
+		t.Fatalf("result with no follow-up = %s, want review_result", got.Reason)
+	}
+}
