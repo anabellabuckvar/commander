@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -65,12 +66,23 @@ func reusePortListen(addr string) (net.Listener, error) {
 	return lc.Listen(context.Background(), "tcp", addr)
 }
 
-// listen binds 127.0.0.1:port, moving to the next port while it is taken.
+// listenHost is the address the API binds: loopback, unless COMMANDER_API_HOST
+// names another one. The bounded container sets it to 0.0.0.0 so the port it
+// publishes (on the host's loopback only) can reach cmdrd inside it.
+func listenHost() string {
+	if h := strings.TrimSpace(os.Getenv("COMMANDER_API_HOST")); h != "" {
+		return h
+	}
+	return "127.0.0.1"
+}
+
+// listen binds listenHost():port, moving to the next port while it is taken.
 func listen(port int) (net.Listener, error) {
+	host := listenHost()
 	var err error
 	for p := port; p < port+portAttempts; p++ {
 		var ln net.Listener
-		ln, err = reusePortListen(fmt.Sprintf("127.0.0.1:%d", p))
+		ln, err = reusePortListen(net.JoinHostPort(host, strconv.Itoa(p)))
 		if err == nil {
 			return ln, nil
 		}

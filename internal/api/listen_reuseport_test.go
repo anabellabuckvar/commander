@@ -52,3 +52,19 @@ func TestListenMovesPastForeignListener(t *testing.T) {
 		t.Fatal("shared a port with a listener that did not opt in")
 	}
 }
+
+func TestListenHostDefaultsToLoopbackAndHonoursOverride(t *testing.T) {
+	t.Setenv("COMMANDER_API_HOST", "")
+	if got := listenHost(); got != "127.0.0.1" {
+		t.Fatalf("default host %q, want 127.0.0.1", got)
+	}
+	t.Setenv("COMMANDER_API_HOST", "0.0.0.0")
+	ln, err := listen(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if ip := ln.Addr().(*net.TCPAddr).IP; !ip.IsUnspecified() {
+		t.Fatalf("bound %v, want the unspecified address", ip)
+	}
+}
