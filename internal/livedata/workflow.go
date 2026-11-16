@@ -188,7 +188,7 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		if p.ProposedAt > 0 && f.b.now-p.ProposedAt >= pitchDeadline {
 			return line{kind: "stalled", text: "Proposed " + p.Proposed + " not reviewed: Commander's move", since: p.ProposedAt}
 		}
-		return line{kind: "waiting", text: "Commander reviewing the proposed " + p.Proposed, since: p.ProposedAt}
+		return line{kind: "waiting", text: "Commander to review the proposed " + p.Proposed, since: p.ProposedAt}
 	} else if ok {
 		if p.AskedAt > 0 && f.b.now-p.AskedAt >= pitchDeadline {
 			return line{kind: "stalled", text: "Pitch still not written: the Manager's move", since: p.AskedAt}

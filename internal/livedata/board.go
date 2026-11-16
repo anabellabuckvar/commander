@@ -1010,7 +1010,7 @@ func (b board) pitchLine(ws SnapWorkstream, busy bool) (line, bool) {
 			if p.ProposedAt > 0 && b.now-p.ProposedAt >= pitchDeadline {
 				return line{kind: "stalled", text: "Proposed " + p.Proposed + " on " + what + " not reviewed: Commander's move", since: p.ProposedAt}, true
 			}
-			return line{kind: "waiting", text: "Commander reviewing the proposed " + p.Proposed + " on " + what, since: p.ProposedAt}, true
+			return line{kind: "waiting", text: "Commander to review the proposed " + p.Proposed + " on " + what, since: p.ProposedAt}, true
 		}
 		if p.AskedAt > 0 && b.now-p.AskedAt >= pitchDeadline {
 			return line{kind: "stalled", text: "Pitch for " + what + " still not written: the Manager's move", since: p.AskedAt}, true

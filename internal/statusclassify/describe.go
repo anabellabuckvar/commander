@@ -363,7 +363,7 @@ func promptFor(actor string) string {
 	case "agent":
 		return describeBase + " Worker agents are on it: say what they are doing right now from their activity, like 'Agent resolving the Navigator conflict', '2 agents running QA Hub parity tests'."
 	case "commander":
-		return describeBase + " Commander, the planning agent, has the next move: say what it is doing or must do, starting with 'Commander', like 'Commander reviewing the SIGINT fix', 'Commander writing your deploy question'. It is not the reader's move yet: never write that the reader is needed. It is not stuck either (that is a different color): never call it stuck or blocked; say what Commander is doing about it."
+		return describeBase + " Commander, the planning agent, owes the next move. Owing it is not doing it: its one chat carries every workstream. Say what it must do, starting with 'Commander to', like 'Commander to review the SIGINT fix', 'Commander to write your deploy question'. Write it as happening now ('Commander reviewing the SIGINT fix') only when the 'Commander is doing' fact is about this exact work. It is not the reader's move yet: never write that the reader is needed. It is not stuck either (that is a different color): never call it stuck or blocked."
 	case "waiting_on_step":
 		return describeBase + " Nothing runs for this line itself: it waits for another step in its workstream to finish. Start with 'Waiting for' and name that step briefly, like 'Waiting for PR 3622 to merge' or 'Waiting for the repair batch install'. Never write that an agent is working on this line."
 	case "external":

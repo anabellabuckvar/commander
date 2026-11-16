@@ -34,7 +34,7 @@ func TestProposedAsk_StaysOutOfNeedsYouUntilAccepted(t *testing.T) {
 	snap := snapOf(ws, idle)
 	snap.NoPitch = []NoPitch{{Project: "p", BeadID: "w.2", Title: "Pick the VMs", Proposed: beads.ProposedAsk, ProposedAt: nowSec - 60}}
 	r := Rows(snap, nowSec)[0]
-	if r.Line.Kind == "needs" || !strings.Contains(r.Line.Text, "Commander reviewing the proposed ask") {
+	if r.Line.Kind == "needs" || !strings.Contains(r.Line.Text, "Commander to review the proposed ask") {
 		t.Fatalf("row line %+v", r.Line)
 	}
 	snap.NoPitch[0].ProposedAt = nowSec - pitchDeadline - 1
@@ -117,7 +117,7 @@ func TestNoPitchWithoutProposalNeverReadsCommanderReviewing(t *testing.T) {
 	snap := snapOf(ws, idle)
 	snap.NoPitch = []NoPitch{{Project: "p", BeadID: "w.2", Title: "Pick the VMs", Gate: true}}
 	r := Rows(snap, nowSec)[0]
-	if strings.Contains(r.Line.Text, "Commander reviewing") {
+	if strings.Contains(r.Line.Text, "Commander to review") {
 		t.Fatalf("row line %+v", r.Line)
 	}
 }
