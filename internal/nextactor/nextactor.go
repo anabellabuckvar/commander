@@ -229,7 +229,7 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		}
 		return Result{Actor: Agent, Reason: "queued", Text: "Queued for the next free agent", Bead: b.ID}
 	}
-	r = commanderOwed(b, ctx, "plan", "plan the next step", 0)
+	r = commanderOwed(b, ctx, "plan", "plan the next step", b.ProgressAt) // owed since the bead last moved
 	r.Bead = b.ID
 	return r
 }

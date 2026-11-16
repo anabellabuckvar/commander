@@ -82,6 +82,7 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"parent carried by children", open(func(b *Bead) { b.HasOpenChildren = true }), false, 0, None, "children", "Carried"},
 		{"parent with its own user ask", open(func(b *Bead) { b.HasOpenChildren = true; b.NeedsUser = true }), false, 0, User, "decision", "Needs you"},
 		{"nothing recorded, Commander busy", open(func(b *Bead) {}), true, 0, Commander, "plan", "Commander: plan"},
+		{"nothing recorded for an hour, Commander busy elsewhere", open(func(b *Bead) { b.ProgressAt = ago(time.Hour) }), true, 0, Stuck, "commander_idle:plan", "Stuck: Commander has not got to plan the next step in"},
 		{"nothing recorded, Commander idle long", open(func(b *Bead) {}), false, time.Hour, Stuck, "commander_idle:plan", "Stuck: Commander has not started to plan"},
 	}
 	for _, c := range cases {
