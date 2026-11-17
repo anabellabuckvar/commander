@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/example-user/commander/internal/harddeny"
 	"github.com/example-user/commander/internal/managerguard"
 	"github.com/example-user/commander/internal/operatorguard"
 )
@@ -35,6 +36,13 @@ func runInternalOperatorGuard(args []string, stdin io.Reader, stdout io.Writer) 
 	if command == "" {
 		if in.ToolName == "" {
 			operatorguard.LogError(home, *role, "no Bash command in hook input", now)
+		}
+		return 0
+	}
+	if hv := hardDenyVerdict(*role, command, in.Cwd); hv.Denied() {
+		_, _ = stdout.Write(append(harddeny.HookOutput(hv), '\n'))
+		if err := operatorguard.LogRefusal(home, *role, command, "hard limit "+hv.Rule+": "+hv.Why, now); err != nil {
+			operatorguard.LogError(home, *role, "refusal log: "+err.Error(), now)
 		}
 		return 0
 	}

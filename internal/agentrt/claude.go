@@ -185,6 +185,13 @@ func agentHooks(agent string, mail bool, managerMatcher string) map[string]any {
 		// SessionStart (startup, resume, compaction) makes the next turn carry the whole board.
 		hooks["SessionStart"] = hook("SessionStart")
 	}
+	if agent == "commander" || strings.HasPrefix(agent, "commander-") {
+		// The hard deny-list (internal/harddeny): refused outright, never prompted.
+		hooks["PreToolUse"] = []map[string]any{{"matcher": "Bash", "hooks": []map[string]any{{
+			"type":    "command",
+			"command": "cmdr internal-hard-deny --role " + agent + " 2>/dev/null || true",
+		}}}}
+	}
 	if IsManagerAgent(agent) {
 		hooks["PreToolUse"] = []map[string]any{{"matcher": managerMatcher, "hooks": []map[string]any{{
 			"type":    "command",

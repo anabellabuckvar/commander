@@ -233,7 +233,12 @@ func TestManagerLaunchDisallowsEditToolsAndGuardsBash(t *testing.T) {
 		if strings.Contains(got, ",Edit,") {
 			t.Errorf("%s must keep edit tools: %s", agent, got)
 		}
-		if strings.Contains(got, "PreToolUse") != (agent != "commander") { // operators get the build-slot guard
+		// Operators get the build-slot guard, the Commander the hard deny-list.
+		guard := "internal-operator-guard"
+		if agent == "commander" {
+			guard = "internal-hard-deny --role commander"
+		}
+		if !strings.Contains(got, "PreToolUse") || !strings.Contains(got, guard) {
 			t.Errorf("%s guard hook mismatch: %s", agent, got)
 		}
 	}
@@ -300,8 +305,9 @@ func TestCodexHookArgsMirrorClaudeHooks(t *testing.T) {
 	if len(op) != 3 || op["Stop"] == nil || op["UserPromptSubmit"] == nil || op["PreToolUse"][0].Matcher != "Bash" || !strings.Contains(op["PreToolUse"][0].Hooks[0].Command, "internal-operator-guard --role operator-op-x") {
 		t.Errorf("one-shot operator: %+v", op)
 	}
-	if cmdr := parse(CodexHookArgs("commander", true)); len(cmdr) != 3 || cmdr["PreToolUse"] != nil || cmdr["SessionStart"] == nil {
-		t.Errorf("commander gets mail hooks only: %+v", cmdr)
+	if cmdr := parse(CodexHookArgs("commander", true)); len(cmdr) != 4 || cmdr["SessionStart"] == nil || cmdr["PreToolUse"] == nil ||
+		!strings.Contains(cmdr["PreToolUse"][0].Hooks[0].Command, "internal-hard-deny --role commander") {
+		t.Errorf("commander gets mail hooks and the hard deny-list: %+v", cmdr)
 	}
 	// Claude's settings are unchanged: the Manager guard there matches Bash only.
 	if s := ClaudeMailHookSettings("manager-ws"); !strings.Contains(s, `"matcher":"Bash"`) {

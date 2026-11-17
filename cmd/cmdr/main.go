@@ -253,6 +253,9 @@ func run(args []string, stdout, stderr *os.File) int {
 	case "workstream-statuses":
 		// What the user's sidebar shows right now, as JSON (the block attached to his messages).
 		return runWorkstreamStatuses(args[1:], stdout, stderr)
+	case "internal-hard-deny":
+		// Claude Code PreToolUse hook on Bash for the Commander: the hard deny-list, refused outright.
+		return runInternalHardDenyMain(args[1:], stdout)
 	case "internal-operator-guard":
 		// Claude Code PreToolUse hook on Bash for Operators: full suites only inside the build slot.
 		return runInternalOperatorGuardMain(args[1:], stdout)

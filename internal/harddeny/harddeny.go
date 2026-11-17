@@ -4,6 +4,7 @@
 package harddeny
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -454,3 +455,17 @@ func checkSQL(command string) Verdict {
 }
 
 func base(w string) string { return filepath.Base(w) }
+
+// HookOutput is the Claude Code PreToolUse JSON that refuses the call with v's message.
+func HookOutput(v Verdict) []byte {
+	b, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
+		"hookEventName":            "PreToolUse",
+		"permissionDecision":       "deny",
+		"permissionDecisionReason": v.Message(),
+	}})
+	return b
+}
+
+// ReleaseDeployLabel marks an approved release-deploy step: its Operator may
+// run the production deploy command.
+const ReleaseDeployLabel = "cmdr:release-deploy"
