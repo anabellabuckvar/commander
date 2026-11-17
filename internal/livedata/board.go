@@ -346,6 +346,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	}
 	r.Workflow, r.Diagram = b.workflow(ws, manager, hasManager, byTrack, pickingUp)
 	b.addNeedsYouLane(ws, &r)
+	showPendingReviews(ws, &r)
 	if g := gateVMOf(ws, b.needsIDs, asks); g != nil {
 		r.Gate = &BoardGate{BeadID: g.beadID, Title: g.title, Who: g.who, At: g.at, ForYou: g.forYou}
 	}

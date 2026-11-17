@@ -6,8 +6,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/nextactor"
 )
 
 // Diagram is a workstream's (or track's) plan drawn as whose move each step
@@ -829,6 +831,48 @@ func (b board) addNeedsYouLane(ws SnapWorkstream, r *BoardRow) {
 				r.Diagram.Tracks[i].Findings = append(r.Diagram.Tracks[i].Findings, f)
 			}
 		}
+	}
+}
+
+// CheckHiddenReview is the check-name of showPendingReviews' finding.
+const CheckHiddenReview = "hidden-review"
+
+// showPendingReviews keeps every "Commander to review" row pointing at
+// something drawn: the step whose result waits for review reads so on its
+// node, with the result's time. A row whose review step is not drawn at all is
+// a finding (the board would point at nothing).
+func showPendingReviews(ws SnapWorkstream, r *BoardRow) {
+	if r.Diagram == nil {
+		return
+	}
+	leads := []*nextactor.Row{r.Actor}
+	for _, t := range r.AllTracks() {
+		leads = append(leads, t.Actor)
+	}
+	seen := map[string]bool{}
+	for _, row := range leads {
+		if row == nil || !strings.HasSuffix(row.Lead.Reason, "review_result") || row.Lead.Bead == "" || seen[row.Lead.Bead] {
+			continue
+		}
+		id := row.Lead.Bead
+		seen[id] = true
+		at := ""
+		if s := findSnapStep(ws.Steps, id); s != nil && s.ResultReadyAt > 0 {
+			at = " (since " + time.Unix(s.ResultReadyAt, 0).In(BoardZone()).Format("3:04 PM") + ")"
+		}
+		if d := r.Diagram.drawn(id); d != nil {
+			if !strings.Contains(strings.ToLower(d.Text), "review") {
+				d.Text = "Commander to review its result" + at
+			}
+			continue
+		}
+		title := id
+		if s := findSnapStep(ws.Steps, id); s != nil {
+			title = plainTitle(s.Title)
+		}
+		r.Diagram.Findings = append(r.Diagram.Findings, DiagramFinding{Check: CheckHiddenReview, Bead: id, Title: title,
+			Why: "the board says Commander to review its result" + at + ", but the step is not drawn in the graph, so the row points at nothing visible",
+			Fix: "review it (accept or re-plan with cmdr), or move the work into a drawn step; if the step is drawn elsewhere, the board derivation is wrong: mail Commander this finding"})
 	}
 }
 
