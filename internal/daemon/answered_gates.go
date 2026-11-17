@@ -8,6 +8,8 @@ import (
 	"github.com/example-user/commander/internal/store"
 )
 
+var notYet = regexp.MustCompile(`(?i)\b(not now|not yet|later|wait|hold|no)\b`)
+
 var dropChoice = regexp.MustCompile(`(?i)^\s*(drop|cancel|skip|withdraw|remove|not needed|no longer)`)
 
 // gateCloseReason is how the user's answer closes their gate, or "" when the
@@ -15,13 +17,14 @@ var dropChoice = regexp.MustCompile(`(?i)^\s*(drop|cancel|skip|withdraw|remove|n
 // to turn into steps).
 func gateCloseReason(g store.AnsweredGate) string {
 	answer := answerText(g.Choice, g.Text)
+	// Only an answer that approves or drops the gate settles it. Anything else
+	// ("Not now", "Not yet", a note) leaves it for the Commander to restructure:
+	// closing it would start the work the user held back.
 	switch {
 	case dropChoice.MatchString(g.Choice):
 		return "Superseded: the user chose “" + answer + "”"
-	case g.Approved:
+	case g.Approved && !notYet.MatchString(g.Choice):
 		return "Approved by the user: " + answer
-	case g.Text != "":
-		return "Answered by the user: " + answer
 	}
 	return ""
 }

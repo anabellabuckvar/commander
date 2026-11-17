@@ -14,7 +14,11 @@ func TestAnsweredGatesCloseOnTheAnswer(t *testing.T) {
 		want string
 	}{
 		{store.AnsweredGate{Bead: "zq9h.8.34", Choice: "Drop it"}, "Superseded: the user chose “Drop it”"},
-		{store.AnsweredGate{Bead: "596t.13.8", Choice: "I'll tell you where", Text: "forge-bench lives as a Forge app"}, "Answered by the user: I'll tell you where: forge-bench lives as a Forge app"},
+		{store.AnsweredGate{Bead: "596t.13.8", Choice: "I'll tell you where", Text: "forge-bench lives as a Forge app"}, ""},
+		// 21:12 Nov 17: these two were closed in error and reopened.
+		{store.AnsweredGate{Bead: "6yen.12.3", Choice: "Not now", Text: "then i dont care i dont want to fix that rn"}, ""},
+		{store.AnsweredGate{Bead: "596t.11.11", Choice: "Not yet", Text: "Switcher shows the Admin org and app orgs"}, ""},
+		{store.AnsweredGate{Bead: "y", Choice: "Not yet", Approved: true}, ""},
 		{store.AnsweredGate{Bead: "x", Choice: "Merge it", Approved: true}, "Approved by the user: Merge it"},
 		{store.AnsweredGate{Bead: "d624.16.5", Choice: "Wait for the leak fix"}, ""},
 	}
