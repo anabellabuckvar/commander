@@ -478,16 +478,23 @@ func (w Wait) Text() string {
 		if w.Ref == "" {
 			return "time"
 		}
-		if w.Cut {
-			ref := w.Ref
-			// Labels written before cuts kept to word boundaries end mid-word: drop the stub.
-			if i := strings.LastIndex(ref, " "); i > 0 && !strings.HasSuffix(ref, " ") {
-				ref = ref[:i]
-			}
-			return strings.TrimSpace(ref) + "…"
-		}
+		return w.RefText()
 	}
 	return w.Ref
+}
+
+// RefText is a time wait's label as shown. A label cut to fit br's label limit
+// ends in "…" at a word boundary, so it never reads as a whole phrase.
+func (w Wait) RefText() string {
+	if !w.Cut {
+		return w.Ref
+	}
+	ref := w.Ref
+	// Labels written before cuts kept to word boundaries end mid-word: drop the stub.
+	if i := strings.LastIndex(ref, " "); i > 0 && !strings.HasSuffix(ref, " ") {
+		ref = ref[:i]
+	}
+	return strings.TrimSpace(ref) + "…"
 }
 
 // WaitsText joins waits for one row: reviewers merge into "review (reviewer-a, reviewer-b)".
