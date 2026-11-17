@@ -18,12 +18,12 @@ func TestPlanTemplatePrintsGuardSafeOps(t *testing.T) {
 	}
 	var check bool
 	for _, op := range got.Ops {
-		if op[0] == "create" && strings.HasPrefix(op[1], "Commander checks") && strings.Contains(strings.Join(op, " "), "lane:commander") {
+		if op[0] == "create" && strings.HasPrefix(op[1], "Review:") && strings.Contains(strings.Join(op, " "), "lane:agents,review") && strings.Contains(strings.Join(op, " "), "--acceptance") {
 			check = true
 		}
 	}
 	if !check || !strings.HasPrefix(got.Ops[1][1], "Notifications redesign PR") {
-		t.Fatalf("missing the Commander check in its own lane or title case: %v", got.Ops)
+		t.Fatalf("missing the independent review step (lane:agents,review, with a brief) or title case: %v", got.Ops)
 	}
 	errb.Reset()
 	if code := runPlanTemplate([]string{"nope", "--parent", "W", "--subject", "x"}, &out, &errb); code != 2 || !strings.Contains(errb.String(), "pr-babysit") {

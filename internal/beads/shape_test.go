@@ -196,14 +196,15 @@ func templateNodes(t *testing.T, ops [][]string, parent string) []ShapeNode {
 	for i, op := range ops {
 		switch op[0] {
 		case "create":
-			pos, f, e := parsePGFlags(op[1:], "--parent --labels --ref --silent")
+			pos, f, e := parsePGFlags(op[1:], "--parent --labels --ref --silent --description --acceptance")
 			if e != nil {
 				t.Fatal(e)
 			}
 			id := parent + "." + string(rune('a'+i))
 			ids["$"+f.one("--ref")] = id
 			idx[id] = len(nodes)
-			nodes = append(nodes, ShapeNode{ID: id, Parent: parent, Title: pos[0], Status: "open", Labels: strings.Split(f.one("--labels"), ","), Responsible: "commander"})
+			nodes = append(nodes, ShapeNode{ID: id, Parent: parent, Title: pos[0], Status: "open", Labels: strings.Split(f.one("--labels"), ","), Responsible: "commander",
+				HasBrief: f.one("--description") != "" && f.one("--acceptance") != ""})
 		case "dep":
 			from, to := ids[op[2]], ids[op[3]]
 			if from == "" || to == "" {

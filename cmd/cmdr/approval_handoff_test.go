@@ -46,7 +46,7 @@ func TestApprovalRetainsCustodyWithStoppedManagerAndMailFailure(t *testing.T) {
 	}
 	for _, now := range []int64{time.Now().Unix(), time.Now().Add(10 * time.Minute).Unix()} {
 		row := livedata.Board(snapshot, now).Workstreams[0]
-		if row.Text == "State missing" || !strings.Contains(row.Text, "Manager") || row.Working != 0 {
+		if row.Text == "State missing" || strings.Contains(row.Text, "Manager") || strings.Contains(row.Text, "Commander") || row.Working != 0 {
 			t.Fatalf("misleading row: %+v", row)
 		}
 	}

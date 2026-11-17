@@ -18,51 +18,51 @@ type planStep struct {
 var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 	"pr-babysit": func(s string, _ bool) []planStep {
 		return []planStep{
-			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective"},
-			{ref: "green", title: s + " PR: get CI green and answer Devin (fix our failures; a red check from main is reported with its cause and owner)", labels: "kind:objective", after: []string{"build"}},
-			{ref: "check", title: "Commander checks the " + s + " PR (green, Devin-clean, matches the scope)", labels: "kind:objective,lane:commander", after: []string{"green"}},
+			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective,lane:agents"},
+			{ref: "green", title: s + " PR: get CI green and answer Devin (fix our failures; a red check from main is reported with its cause and owner)", labels: "kind:objective,lane:agents", after: []string{"build"}},
+			{ref: "check", title: "Review: the " + s + " PR (green, Devin-clean, matches the scope)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
-			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective", after: []string{"merge"}},
+			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective,lane:agents", after: []string{"merge"}},
 			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
 		}
 	},
 	"app-release": func(s string, ownerGo bool) []planStep {
 		steps := []planStep{
-			{ref: "train", title: "Release " + s + ": assemble the release on the dev box", labels: "kind:objective"},
-			{ref: "fix", title: "Release " + s + ": fix or drop every failing change (no weakened tests; dropped changes move to the next release with the reason)", labels: "kind:objective", after: []string{"train"}},
-			{ref: "validate", title: "Release " + s + ": one full validate on the final tree, receipt written (dev box quiet)", labels: "kind:objective", after: []string{"fix"}},
+			{ref: "train", title: "Release " + s + ": assemble the release on the dev box", labels: "kind:objective,lane:agents"},
+			{ref: "fix", title: "Release " + s + ": fix or drop every failing change (no weakened tests; dropped changes move to the next release with the reason)", labels: "kind:objective,lane:agents", after: []string{"train"}},
+			{ref: "validate", title: "Release " + s + ": one full validate on the final tree, receipt written (dev box quiet)", labels: "kind:objective,lane:agents", after: []string{"fix"}},
 		}
 		deployAfter := "validate"
 		if ownerGo {
 			steps = append(steps,
-				planStep{ref: "check", title: "Commander checks release " + s + " (validate green on the final tree, receipt written, what was dropped and why)", labels: "kind:objective,lane:commander", after: []string{"validate"}},
+				planStep{ref: "check", title: "Review: release " + s + " (validate green on the final tree, receipt written, what was dropped and why)", labels: "kind:objective,lane:agents,review", after: []string{"validate"}},
 				planStep{ref: "go", title: "Greenlight shipping release " + s, labels: "kind:objective,gate,approver:user", after: []string{"check"}})
 			deployAfter = "go"
 		}
 		return append(steps,
-			planStep{ref: "deploy", title: "Release " + s + ": deploy to prod reusing the receipt (zero downtime, memory gate)", labels: "kind:objective,cmdr:release-deploy", after: []string{deployAfter}},
-			planStep{ref: "watch", title: "Release " + s + ": 15-minute prod watch, then post DEPLOYED", labels: "kind:objective", after: []string{"deploy"}},
-			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective", after: []string{"watch"}},
+			planStep{ref: "deploy", title: "Release " + s + ": deploy to prod reusing the receipt (zero downtime, memory gate)", labels: "kind:objective,lane:agents,cmdr:release-deploy", after: []string{deployAfter}},
+			planStep{ref: "watch", title: "Release " + s + ": 15-minute prod watch, then post DEPLOYED", labels: "kind:objective,lane:agents", after: []string{"deploy"}},
+			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective,lane:agents", after: []string{"watch"}},
 			planStep{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"mainline"}},
 		)
 	},
 	"propose-then-approve": func(s string, _ bool) []planStep {
 		return []planStep{
-			{ref: "propose", title: "Propose " + s + " (what, why, and how it will be checked)", labels: "kind:objective"},
-			{ref: "check", title: "Commander checks the " + s + " proposal (complete, matches the scope)", labels: "kind:objective,lane:commander", after: []string{"propose"}},
+			{ref: "propose", title: "Propose " + s + " (what, why, and how it will be checked)", labels: "kind:objective,lane:agents"},
+			{ref: "check", title: "Review: the " + s + " proposal (complete, matches the scope)", labels: "kind:objective,lane:agents,review", after: []string{"propose"}},
 			{ref: "approve", title: "Approve " + s, labels: "kind:objective,gate,approver:user", after: []string{"check"}},
-			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective", after: []string{"approve"}},
-			{ref: "green", title: s + " PR: get CI green and answer Devin", labels: "kind:objective", after: []string{"build"}},
-			{ref: "check2", title: "Commander checks the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:commander", after: []string{"green"}},
+			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective,lane:agents", after: []string{"approve"}},
+			{ref: "green", title: s + " PR: get CI green and answer Devin", labels: "kind:objective,lane:agents", after: []string{"build"}},
+			{ref: "check2", title: "Review: the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
-			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works", labels: "kind:objective", after: []string{"merge"}},
+			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works", labels: "kind:objective,lane:agents", after: []string{"merge"}},
 			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
 		}
 	},
 	"investigation": func(s string, _ bool) []planStep {
 		return []planStep{
-			{ref: "investigate", title: "Investigate " + s + ": reproduce and find the cause, with evidence", labels: "kind:objective"},
-			{ref: "check", title: "Commander checks the " + s + " findings (cause proven, evidence attached)", labels: "kind:objective,lane:commander", after: []string{"investigate"}},
+			{ref: "investigate", title: "Investigate " + s + ": reproduce and find the cause, with evidence", labels: "kind:objective,lane:agents"},
+			{ref: "check", title: "Review: the " + s + " findings (cause proven, evidence attached)", labels: "kind:objective,lane:agents,review", after: []string{"investigate"}},
 			{ref: "decide", title: "Decide the " + s + " fix: proposed change, size and risk", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
 			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"decide"}},
 		}
@@ -95,7 +95,11 @@ func PlanTemplateOps(name, parent, subject string, ownerGo bool) ([][]string, er
 		if r := []rune(title); len(r) > 0 {
 			title = strings.ToUpper(string(r[0])) + string(r[1:])
 		}
-		ops = append(ops, []string{"create", title, "--parent", parent, "--labels", s.labels, "--ref", s.ref, "--silent"})
+		op := []string{"create", title, "--parent", parent, "--labels", s.labels, "--ref", s.ref, "--silent"}
+		if desc, acc := stepBrief(s, title); desc != "" {
+			op = append(op, "--description", desc, "--acceptance", acc)
+		}
+		ops = append(ops, op)
 	}
 	for _, s := range build(strings.TrimSpace(subject), ownerGo) {
 		for _, a := range s.after {
@@ -103,4 +107,17 @@ func PlanTemplateOps(name, parent, subject string, ownerGo bool) ([][]string, er
 		}
 	}
 	return ops, nil
+}
+
+// stepBrief is an agent step's brief, from its own title: a review step checks
+// the result of the steps it waits on, independently of the agent that built it.
+func stepBrief(s planStep, title string) (description, acceptance string) {
+	if !strings.Contains(s.labels, "lane:agents") {
+		return "", ""
+	}
+	if strings.Contains(s.labels, "review") {
+		return "Review brief: " + title + ". You are an independent reviewer, not the agent that did the work. Read the result of the step(s) this waits on (their final reports, PR, run output or live evidence) and check each point named in the title against it.",
+			"Final report states PASS with the evidence for each point, or BLOCKED naming each gap and where it is."
+	}
+	return title + ".", "Final report says what was done, with the evidence (PR, run, output) that it is done."
 }

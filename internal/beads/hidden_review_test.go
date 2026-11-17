@@ -34,8 +34,8 @@ func TestEveryTemplateHasNoHiddenReview(t *testing.T) {
 					continue
 				}
 				for _, a := range s.after {
-					if !contains(byRef[a].labels, "lane:commander") {
-						t.Fatalf("%s (ownerGo=%v): user gate %q follows %q, not a Commander check", name, ownerGo, s.title, byRef[a].title)
+					if !contains(byRef[a].labels, "review") || contains(byRef[a].labels, "lane:commander") {
+						t.Fatalf("%s (ownerGo=%v): user gate %q follows %q, not an independent review step", name, ownerGo, s.title, byRef[a].title)
 					}
 				}
 			}

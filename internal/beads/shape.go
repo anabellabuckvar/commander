@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -25,6 +26,8 @@ type ShapeNode struct {
 	Responsible string
 	Assigned    string
 	HasReason   bool // description or a parked-from label explains a park
+	// HasBrief: description and acceptance are both set.
+	HasBrief bool
 	// AnswerPending: the user's answer is recorded and not yet applied.
 	AnswerPending bool
 }
@@ -92,7 +95,7 @@ func (n *ShapeNode) parked() bool { return n.Status == "deferred" || n.has("park
 func (n *ShapeNode) gate() bool   { return n.has("gate") }
 func (n *ShapeNode) waiting() bool {
 	for _, l := range n.Labels {
-		if strings.HasPrefix(l, "w:") {
+		if strings.HasPrefix(l, "w:") || strings.HasPrefix(l, WaitLabelPrefix) {
 			return true
 		}
 	}
@@ -147,7 +150,7 @@ func shapeStage(n *ShapeNode) int {
 		return stageLive
 	case has("greenlight") && has("merge", "merging", "override merge"):
 		return stageMerge
-	case strings.HasPrefix(strings.TrimSpace(t), "commander check") || strings.HasPrefix(strings.TrimSpace(t), "commander review") || has("independent review"):
+	case n.reviewStep() || strings.HasPrefix(strings.TrimSpace(t), "commander check") || strings.HasPrefix(strings.TrimSpace(t), "commander review") || has("independent review"):
 		return stageCheck
 	case has("ci green", "get green", "get ci green", "open pr", "answer devin"):
 		return stagePR
@@ -251,8 +254,8 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 			}
 			if len(checks) == 0 {
 				add(ShapeViolation{Rule: "merge-without-check", Beads: []string{g.ID},
-					Why: fmt.Sprintf("merge greenlight %s has no PR-green or Commander check step before it", g.ID),
-					Fix: "add a \"get the PR green and answer Devin\" step and a Commander check (lane:commander) before the merge greenlight"})
+					Why: fmt.Sprintf("merge greenlight %s has no PR-green or review step before it", g.ID),
+					Fix: "add a \"get the PR green and answer Devin\" step and a review step (lane:agents,review) before the merge greenlight"})
 				continue
 			}
 			behind := false
@@ -281,21 +284,60 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 			continue
 		}
 		// j. no hidden review: an agent's result reaches the user only through an
-		// explicit Commander check step, never through a review nobody can see.
+		// independent review step (run by a review agent), never directly. A
+		// review already between them (done or not) counts; the gate's blockers
+		// that are the user's own steps or in another track are not agent work.
 		if n.gate() && n.prefixed("approver:") == "user" && !n.closing() {
 			for _, bid := range n.Blockers {
 				w, ok := t.byID[bid]
-				if !ok || w.gate() || w.Parent != n.Parent {
+				if !ok || !w.agentWork() || w.Parent != n.Parent {
 					continue
 				}
-				lane := w.prefixed("lane:")
-				if lane == "commander" || lane == "you" || strings.HasPrefix(lane, "elsewhere") || commanderOwnTitle.MatchString(w.Title) {
+				if t.reviewedBefore(n, w) {
 					continue
 				}
 				add(ShapeViolation{Rule: "hidden-review", Beads: []string{w.ID, n.ID},
-					Why: fmt.Sprintf("Eric's gate %q follows the agent step %q directly, so the Commander's review of its result is hidden", n.Title, w.Title),
-					Fix: fmt.Sprintf("add a Commander check step (lane:commander) that waits on %s, and make %s wait on that check instead", w.ID, n.ID)})
+					Why: fmt.Sprintf("Eric's gate %q follows the agent step %q directly, with no independent review of its result", n.Title, w.Title),
+					Fix: fmt.Sprintf("add a review step (labels lane:agents,review; title \"Review: <what to check>\"; description and acceptance saying what to check) that waits on %s, and make %s wait on it instead of on %s", w.ID, n.ID, w.ID)})
 			}
+		}
+		// l. the Commander runs no steps: a check is an independent review step.
+		if !n.closing() && (n.prefixed("lane:") == "commander" || (n.gate() && (n.prefixed("approver:") == "commander" || strings.HasPrefix(n.prefixed("approver:"), "manager")))) {
+			add(ShapeViolation{Rule: "commander-step", Beads: []string{n.ID},
+				Why: fmt.Sprintf("%q is a Commander step, but the Commander runs no steps: checks are done by an independent review agent", n.Title),
+				Fix: fmt.Sprintf("make %s a review step: labels lane:agents,review (drop lane:commander, gate and approver:commander), title \"Review: ...\", with a description and acceptance saying what to check", n.ID)})
+		}
+		// m. a review checks agent work: it waits on an agent step in its track,
+		// and no other review already checks that work.
+		if n.reviewStep() {
+			var work []string
+			for _, bid := range n.Blockers {
+				if w, ok := t.byID[bid]; ok && w.agentWork() && w.Parent == n.Parent {
+					work = append(work, w.ID)
+				}
+			}
+			if len(work) == 0 {
+				add(ShapeViolation{Rule: "review-without-work", Beads: []string{n.ID},
+					Why: fmt.Sprintf("review step %q waits on no agent step in its track, so it has no result to check", n.Title),
+					Fix: fmt.Sprintf("make %s wait on the agent step whose result it checks, or supersede it", n.ID)})
+			} else if other := t.otherReview(n, work); other != "" {
+				add(ShapeViolation{Rule: "duplicate-review", Beads: []string{n.ID, other},
+					Why: fmt.Sprintf("review step %q checks the same work as %s, which already reviews it", n.Title, other),
+					Fix: fmt.Sprintf("supersede %s and keep its gate waiting on %s", n.ID, other)})
+			}
+		}
+		// n. every step has an owner: lane:agents, lane:you (or a user gate),
+		// lane:elsewhere[:who], or a typed wait. Nothing defaults to the Commander.
+		if !n.gate() && !n.container() && len(t.children[n.ID]) == 0 && n.prefixed("lane:") == "" && !n.waiting() && !n.has("kind:gate") && !n.has("kind:task") {
+			add(ShapeViolation{Rule: "no-owner-tag", Beads: []string{n.ID},
+				Why: fmt.Sprintf("%q has no owner tag, so the board cannot say whose move it is", n.Title),
+				Fix: fmt.Sprintf("label %s lane:agents (an agent runs it), lane:you (Eric does it), or lane:elsewhere:<who> (someone outside)", n.ID)})
+		}
+		// o. an agent step carries its brief: no agent starts without one.
+		if !n.gate() && !n.closed() && !n.container() && len(t.children[n.ID]) == 0 && n.agentWork() && !n.HasBrief && n.prefixed("lane:") == "agents" {
+			add(ShapeViolation{Rule: "no-brief", Beads: []string{n.ID},
+				Why: fmt.Sprintf("agent step %q has no description and acceptance, so no agent can be started on it", n.Title),
+				Fix: fmt.Sprintf("give %s a description (what to do) and acceptance (what counts as done)", n.ID)})
 		}
 		// c. the Commander's own steps stay in the Commander column
 		if commanderOwnTitle.MatchString(n.Title) {
@@ -487,4 +529,96 @@ func ShapeTransitions(before, after []ShapeNode, agent bool) []ShapeViolation {
 			Fix: fmt.Sprintf("leave %s open for the user's card; if the user said yes in chat, record it: cmdr internal-resolve-needs --bead %s --action approve --relayed '<when, and their exact words>'", n.ID, n.ID)})
 	}
 	return out
+}
+
+var reviewTitle = regexp.MustCompile(`(?i)^\s*(review\b|independent review|review agent|commander checks?\b|my check\b)`)
+
+// reviewStep: an independent review step (the old Commander checks included).
+func (n *ShapeNode) reviewStep() bool {
+	if n.gate() {
+		return n.prefixed("approver:") == "commander"
+	}
+	return n.prefixed("lane:") == "commander" || n.has("review") || reviewTitle.MatchString(n.Title)
+}
+
+// agentWork: a step an agent does whose result someone must be able to trust:
+// not a gate, not a review, not the user's or someone outside's.
+func (n *ShapeNode) agentWork() bool {
+	lane := n.prefixed("lane:")
+	return !n.gate() && !n.reviewStep() && !n.closing() && (lane == "" || lane == "agents") && n.prefixed("approver:") == ""
+}
+
+// reviewedBefore: another blocker of gate g is a review step that waits,
+// directly or through other steps, on w.
+func (t shapeTree) reviewedBefore(g, w *ShapeNode) bool {
+	for _, bid := range g.Blockers {
+		c, ok := t.byID[bid]
+		if !ok || c.ID == w.ID || !c.reviewStep() {
+			continue
+		}
+		if t.reaches(c.ID, w.ID, map[string]bool{}) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t shapeTree) reaches(from, to string, seen map[string]bool) bool {
+	if seen[from] {
+		return false
+	}
+	seen[from] = true
+	n, ok := t.byID[from]
+	if !ok {
+		return false
+	}
+	for _, b := range n.Blockers {
+		if b == to || t.reaches(b, to, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+// otherReview is a review step other than r that already checks one of work:
+// a done one, or an open one created before r.
+func (t shapeTree) otherReview(r *ShapeNode, work []string) string {
+	for _, n := range t.byID {
+		if n.ID == r.ID || !n.reviewStep() || n.Parent != r.Parent || n.has("superseded") {
+			continue
+		}
+		if !n.closed() && !idBefore(n.ID, r.ID) {
+			continue
+		}
+		for _, b := range n.Blockers {
+			for _, w := range work {
+				if b == w {
+					return n.ID
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// idBefore orders bead ids by their numeric suffixes (x.9 before x.12).
+func idBefore(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if pa[i] == pb[i] {
+			continue
+		}
+		na, ea := strconv.Atoi(pa[i])
+		nb, eb := strconv.Atoi(pb[i])
+		if ea == nil && eb == nil {
+			return na < nb
+		}
+		return pa[i] < pb[i]
+	}
+	return len(pa) < len(pb)
+}
+
+// container: a workstream or track bead, which holds steps.
+func (n *ShapeNode) container() bool {
+	return n.has("kind:workstream") || n.has("kind:track")
 }
