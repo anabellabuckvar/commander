@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
 	"time"
 
+	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -21,6 +23,10 @@ type executionRedirector struct {
 		RecordExecutionRedirect(context.Context, store.PlanChange, string) error
 	}
 	send func(ctx context.Context, role, text string) error
+	// dead backs off, then gives up, telling a role with no running process
+	// (nil: retry every pass).
+	dead *unreachable
+	now  func() time.Time
 }
 
 func (r executionRedirector) run(ctx context.Context) {
@@ -42,12 +48,36 @@ func (r executionRedirector) pass(ctx context.Context) {
 		log.Printf("execution redirect: %v", err)
 		return
 	}
+	now := time.Now()
+	if r.now != nil {
+		now = r.now()
+	}
 	for _, c := range changes {
+		key := fmt.Sprintf("%s|%s|%d", c.Agent, c.BeadID, c.CurrentRevision)
+		if !r.dead.due(key, now) {
+			continue
+		}
 		text := redirectMessage(c)
 		if err := r.send(ctx, c.Agent, text); err != nil {
+			if r.dead != nil && errors.Is(err, chat.ErrNotRunning) {
+				first, giveUp := r.dead.failed(key, now)
+				switch {
+				case giveUp:
+					// Handled: the run's process is gone, so nobody can be told;
+					// its exit and liveness settle the step.
+					if err := r.store.RecordExecutionRedirect(ctx, c, "Not delivered: "+c.Agent+" has no running process, so it was not told: "+text); err != nil {
+						log.Printf("execution redirect: record %s: %v", c.BeadID, err)
+					}
+					log.Printf("execution redirect: gave up telling %s about %s: no running process after %d tries", c.Agent, c.BeadID, len(unreachableDelays)+1)
+				case first:
+					log.Printf("execution redirect: tell %s about %s: %v (retrying with backoff)", c.Agent, c.BeadID, err)
+				}
+				continue
+			}
 			log.Printf("execution redirect: tell %s about %s: %v", c.Agent, c.BeadID, err)
 			continue
 		}
+		r.dead.clear(key)
 		if err := r.store.RecordExecutionRedirect(ctx, c, text); err != nil {
 			log.Printf("execution redirect: record %s: %v", c.BeadID, err)
 		}

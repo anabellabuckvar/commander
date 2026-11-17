@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/example-user/commander/internal/chat"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -25,6 +27,9 @@ type executionCutover struct {
 	send func(ctx context.Context, role, text string) error
 	stop func(ctx context.Context, role string) error
 	now  func() time.Time
+	// dead backs off, then gives up, telling a role with no running process
+	// (nil: retry every pass).
+	dead *unreachable
 }
 
 func (c executionCutover) run(ctx context.Context) {
@@ -56,11 +61,31 @@ func (c executionCutover) pass(ctx context.Context) {
 		}
 		switch {
 		case x.ToldAt == 0:
+			key := fmt.Sprintf("%s|%s|%d", x.Agent, x.BeadID, x.RunID)
+			if !c.dead.due(key, now) {
+				continue
+			}
 			text := cutoverMessage(x)
 			if err := c.send(ctx, x.Agent, text); err != nil {
+				if c.dead != nil && errors.Is(err, chat.ErrNotRunning) {
+					first, giveUp := c.dead.failed(key, now)
+					switch {
+					case giveUp:
+						// Nobody runs to be told: record it, so the grace runs out and
+						// the stop settles the run instead of telling it forever.
+						if err := c.store.RecordCutoverStep(ctx, x, store.CutoverToldKind, "Not delivered: "+x.Agent+" has no running process, so it was not told: "+text); err != nil {
+							log.Printf("execution cutover: record told %s: %v", x.BeadID, err)
+						}
+						log.Printf("execution cutover: gave up telling %s about %s: no running process after %d tries", x.Agent, x.BeadID, len(unreachableDelays)+1)
+					case first:
+						log.Printf("execution cutover: tell %s about %s: %v (retrying with backoff)", x.Agent, x.BeadID, err)
+					}
+					continue
+				}
 				log.Printf("execution cutover: tell %s about %s: %v", x.Agent, x.BeadID, err)
 				continue
 			}
+			c.dead.clear(key)
 			if err := c.store.RecordCutoverStep(ctx, x, store.CutoverToldKind, "cmdrd told the agent: "+text); err != nil {
 				log.Printf("execution cutover: record told %s: %v", x.BeadID, err)
 			}

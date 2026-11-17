@@ -31,7 +31,7 @@ Report exports (lab-bex)
   - [gate-criteria] lab-bex.3.3 "Greenlight the export format": the gate does not say what counts as passed. Fix: cmdr internal-update --project lab --bead lab-bex.3.3 --acceptance "<what counts as passed, one sentence>"
   - [unheld] lab-bex.4 "Backfill last quarter": it is open with no running agent, no recorded wait and nothing asked of you, so the diagram cannot say whose move it is. Fix: record what it waits on (--waiting ci:#N, review:<login>, until:<time>:<what then>), give it a running owner, or ask the user (--state needs-user --decision)
   - [gate-title, advisory] lab-bex.5 "Approve the rollout?": the title is a question; a checkpoint names the outcome. Fix: cmdr internal-rename-objective --project lab --bead lab-bex.5 --title "<Greenlight doing it | what is true, past tense>"
-  - [lane-label] lab-bex.8 "Key rotation scheduled": its label lane:bogus is not a lane, so the diagram ignores it. Fix: cmdr internal-set-objective --project lab --bead lab-bex.8 --lane you|agents|elsewhere:<who> (or --lane none)
+  - [lane-label] lab-bex.8 "Key rotation scheduled": its label lane:bogus is not a lane, so the diagram ignores it. Fix: cmdr internal-set-objective --project lab --bead lab-bex.8 --lane you|commander|agents|elsewhere:<who> (or --lane none)
   - [cycle] lab-bex.7 "Rotate the export key": its dependencies loop (lab-bex.7 waits on lab-bex.8 waits on lab-bex.7), so nothing in the loop can start. Fix: cmdr internal-dep --project lab rm <step> <the step it does not really wait on>
 
 #2 On-call tooling
