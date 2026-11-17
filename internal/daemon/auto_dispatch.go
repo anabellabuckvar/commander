@@ -54,6 +54,10 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 		var walk func([]livedata.SnapStep)
 		walk = func(steps []livedata.SnapStep) {
 			for _, s := range steps {
+				// Nothing under a paused, held or closed stage or track starts.
+				if s.Hold || s.Status == "deferred" || s.Status == "closed" || s.Superseded || s.Withdrawn {
+					continue
+				}
 				if dispatchable(s, byID) && !running[key{ws.ProjectID, s.BeadID}] && !asked[ws.Project+"\x00"+s.BeadID] {
 					out = append(out, dispatchJob{projectID: ws.ProjectID, project: ws.Project, bead: s.BeadID, title: s.Title})
 				}

@@ -56,3 +56,23 @@ func TestAutoDispatchPicksApprovedWorkNoManagerWillStart(t *testing.T) {
 		t.Fatalf("with its Manager running cmdrd dispatched %v, want the same two steps", jobs)
 	}
 }
+
+// Nov 17 20:31: a step under a parked track was started. Nothing under a
+// paused, held or parked parent starts.
+func TestAutoDispatchSkipsStepsUnderAPausedTrack(t *testing.T) {
+	ready := livedata.SnapStep{BeadID: "w.18.3", Title: "Build option C", Status: "open", State: "not-started", ExecutionMode: "active", Lane: "agents"}
+	for _, parent := range []livedata.SnapStep{
+		{BeadID: "w.18", Status: "deferred", Track: true, Children: []livedata.SnapStep{ready}},
+		{BeadID: "w.18", Status: "open", Hold: true, Track: true, Children: []livedata.SnapStep{ready}},
+	} {
+		snap := livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{{ProjectID: 2, Project: "p", BeadID: "w", Status: "open", Steps: []livedata.SnapStep{parent}}}}
+		if jobs := autoDispatchJobs(snap); len(jobs) != 0 {
+			t.Fatalf("started under a paused track: %v", jobs)
+		}
+	}
+	open := livedata.SnapStep{BeadID: "w.18", Status: "open", Track: true, Children: []livedata.SnapStep{ready}}
+	snap := livedata.Snapshot{Workstreams: []livedata.SnapWorkstream{{ProjectID: 2, Project: "p", BeadID: "w", Status: "open", Steps: []livedata.SnapStep{open}}}}
+	if jobs := autoDispatchJobs(snap); len(jobs) != 1 {
+		t.Fatalf("an open track's ready step not started: %v", jobs)
+	}
+}
