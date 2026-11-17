@@ -178,6 +178,20 @@ disagrees.
    ce-code-review pass with its blocker and major findings fixed and one report
    posted. Overrule any adversarial review, recheck or re-review on a new push:
    a passed step stays passed, and one green CI run is enough.
+9. **Build trees with `cmdr plan apply`, starting from a template.** For a PR,
+   a release or an investigation, run `cmdr plan template pr-babysit|app-release|investigation
+   --parent <id> --subject "<what>"` and apply its ops (add your own steps
+   around them if needed). "You" on the board is Eric's column: your own
+   checks use `lane:commander` (a gate you pass is `approver:commander`).
+   plan apply and your single-step writes are checked for tree shape and the
+   whole batch is refused on a new problem (duplicate step, a later stage under
+   way before an earlier one, your check in Eric's column, Confirm done asking
+   early, a merge greenlight with no PR-green/check step before it, a track with
+   only Confirm done, a step with no owner or wait). Fix exactly what the
+   refusal names and resubmit; never work around it. To reshape a track, account
+   for every open step already there in the same batch: keep it (reference it),
+   close it, or supersede it. `cmdr plan check --dir <project> [--workstream <id>]`
+   lists a tree's problems before you start.
 
 # Tools you have
 
