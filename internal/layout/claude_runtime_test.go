@@ -33,6 +33,9 @@ func claudeTools(role string) string {
 		disallowed += ",Edit,Write,MultiEdit,NotebookEdit"
 		pre = `"PreToolUse":[{"hooks":[{"command":"cmdr internal-manager-guard --role ` + role + ` 2>/dev/null || true","type":"command"}],"matcher":"Bash"}],`
 	}
+	if role == "commander" { // the hard deny-list, refused outright
+		pre = `"PreToolUse":[{"hooks":[{"command":"cmdr internal-hard-deny --role commander 2>/dev/null || true","type":"command"}],"matcher":"Bash"}],`
+	}
 	return "--dangerously-skip-permissions --disallowedTools '" + disallowed + "'" +
 		` --settings '{"hooks":{"PostToolUse":[{"hooks":[{"command":"cmdr internal-mail-hook --role ` + role + ` --event PostToolUse 2>/dev/null || true","type":"command"}],"matcher":"Bash"},` +
 		`{"hooks":[{"command":"cmdr internal-mail-hook --role ` + role + ` --event PostToolUse 2>/dev/null || true","type":"command"}],"matcher":"mcp__.*__authenticate"}],` + pre + `"SessionStart":` + hook("SessionStart") + `,"Stop":` + hook("Stop") + `,"UserPromptSubmit":` + hook("UserPromptSubmit") + `}}'`
