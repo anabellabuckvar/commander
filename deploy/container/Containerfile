@@ -1,9 +1,11 @@
 # Commander engine (cmdrd) in a bounded container.
 #
 # Built for the host's own architecture (arm64 on Apple silicon, amd64 on
-# Linux). The run script (deploy/container/run.sh) puts it in a pod beside
-# PostgreSQL with CPU, memory, pids and disk limits, and publishes the API on
-# the host's loopback only.
+# Linux). The run script (deploy/container/run.sh) puts it beside PostgreSQL
+# with CPU, memory, pids and disk limits, and publishes the API on the host's
+# loopback only. The image carries what a normal install needs to add a
+# project and run an Operator: beads (bd + dolt), agent-mail (am), Claude Code,
+# opencode, git, tmux and jq. No login or token is baked in: they live in the volumes.
 
 ARG GO_VERSION=1.25
 
@@ -25,15 +27,43 @@ COPY app/ ./
 RUN npx vite build --config vite.renderer.config.mts && test -f dist/index.html
 
 FROM docker.io/library/debian:bookworm-slim
-# Agents shell out to git, tmux, bash, jq and curl; Claude Code needs Node.
+# Versions match a host install (bd 1.3.1, am 0.3.39, dolt 2.5.0), from the same
+# upstream releases install/ uses, checksum-verified.
+ARG BD_VERSION=1.3.1
+ARG AM_VERSION=0.3.39
+ARG DOLT_VERSION=2.5.0
 RUN apt-get update \
- && apt-get install -y --no-install-recommends bash ca-certificates curl git jq procps tmux nodejs npm \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git jq openssl procps tmux xz-utils nodejs npm \
+ && rm -rf /var/lib/apt/lists/* \
+ && case "$(dpkg --print-architecture)" in \
+      amd64) bdarch=amd64; amarch=x86_64-unknown-linux-gnu; dolt=linux-amd64;; \
+      arm64) bdarch=arm64; amarch=aarch64-unknown-linux-gnu; dolt=linux-arm64;; \
+    esac \
+ && mkdir /tmp/dl && cd /tmp/dl \
+ && curl -fsSL -o bd.tgz "https://github.com/steveyegge/beads/releases/download/v${BD_VERSION}/beads_${BD_VERSION}_linux_${bdarch}.tar.gz" \
+ && curl -fsSL -o bd.sums "https://github.com/steveyegge/beads/releases/download/v${BD_VERSION}/checksums.txt" \
+ && grep " beads_${BD_VERSION}_linux_${bdarch}.tar.gz\$" bd.sums | sed 's/ .*/  bd.tgz/' | sha256sum -c - \
+ && tar -xzf bd.tgz bd && install -m 0755 bd /usr/local/bin/bd \
+ && curl -fsSL -o am.txz "https://github.com/Dicklesworthstone/mcp_agent_mail_rust/releases/download/v${AM_VERSION}/mcp-agent-mail-${amarch}.tar.xz" \
+ && curl -fsSL -o am.sha "https://github.com/Dicklesworthstone/mcp_agent_mail_rust/releases/download/v${AM_VERSION}/mcp-agent-mail-${amarch}.tar.xz.sha256" \
+ && echo "$(cut -d' ' -f1 am.sha)  am.txz" | sha256sum -c - \
+ && tar -xJf am.txz am && install -m 0755 am /usr/local/bin/am \
+ && curl -fsSL -o dolt.tgz "https://github.com/dolthub/dolt/releases/download/v${DOLT_VERSION}/dolt-${dolt}.tar.gz" \
+ && tar -xzf dolt.tgz && install -m 0755 "dolt-${dolt}/bin/dolt" /usr/local/bin/dolt \
+ && cd / && rm -rf /tmp/dl
 ARG CLAUDE_CODE_VERSION=latest
-RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
+# Claude Code runs Operators; opencode holds the Manager session a project add bootstraps.
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" opencode-ai && npm cache clean --force
 COPY --from=build /out/cmdr /out/cmdrd /usr/local/bin/
 COPY --from=app /src/app/dist /usr/local/share/commander/app
-RUN useradd --create-home --uid 1000 commander
+COPY deploy/container/entrypoint.sh /usr/local/bin/commander-entrypoint
+# cmdrd finds its checkout through the REPO file beside the binary: it keys
+# agent-mail on it and writes the agents' prompt files there.
+COPY --from=build /src/go.mod /opt/commander/go.mod
+COPY --from=build /src/prompts /opt/commander/prompts
+RUN useradd --create-home --uid 1000 --shell /bin/bash commander \
+ && echo /opt/commander > /usr/local/bin/REPO \
+ && chown -R commander:commander /opt/commander
 USER commander
 ENV HOME=/home/commander \
     COMMANDER_HOME=/home/commander/.commander \
@@ -42,4 +72,4 @@ ENV HOME=/home/commander \
     COMMANDER_APP_DEV_URL=off
 WORKDIR /home/commander
 EXPOSE 8787
-ENTRYPOINT ["/usr/local/bin/cmdrd"]
+ENTRYPOINT ["/usr/local/bin/commander-entrypoint"]
