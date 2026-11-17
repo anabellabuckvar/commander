@@ -336,6 +336,12 @@ func New() (*Daemon, error) {
 			}
 			return waits.PRStates()
 		},
+		InvalidState: func() []livedata.InvalidState {
+			if waits == nil {
+				return nil
+			}
+			return waits.InvalidState()
+		},
 		ReviewFacts: func() map[string]livedata.ReviewFact {
 			if waits == nil {
 				return nil
@@ -529,6 +535,7 @@ func New() (*Daemon, error) {
 			return managerRunning(live.Snapshot(ctx), role)
 		}
 		waits.slack = newSlackHistory(home)
+		waits.shapeReport = defaultShapeReport
 	}
 	return d, nil
 }

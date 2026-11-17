@@ -85,6 +85,9 @@ type waitWatcher struct {
 	checkedAt atomic.Int64
 	// facts is each bead's review waits as GitHub had them at the last poll.
 	facts atomic.Pointer[map[string]livedata.ReviewFact]
+	// shapeReport and invalid: the continuous state audit (nil report: off).
+	shapeReport shapeReportFunc
+	invalid     atomic.Pointer[[]livedata.InvalidState]
 	// managerLive reports whether a workstream's Manager is running. When it is
 	// not, a resolved wait wakes the step's own running agent, or nobody (the
 	// dispatch receipt lets auto-dispatch start the step): the Commander is not
@@ -135,6 +138,7 @@ func (w *waitWatcher) pollUntil(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	w.auditState(ctx, projects)
 	for _, p := range projects {
 		all, err := w.beads.List(ctx, p.Path, beads.ListOptions{Status: "all"})
 		if err != nil {

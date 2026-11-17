@@ -32,7 +32,9 @@ type Snapshot struct {
 	// MergeHeld are merge cards kept off NEEDS YOU while their PR is not green
 	// and mergeable (project\x00bead: what they wait on).
 	MergeHeld map[string]string `json:"merge_held,omitempty"`
-	Answers   map[string]int    `json:"answers,omitempty"`
+	// InvalidState is cmdrd's last audit of every open tree against the write validator.
+	InvalidState []InvalidState `json:"invalid_state,omitempty"`
+	Answers      map[string]int `json:"answers,omitempty"`
 	// PreserveVersion marks a failed project read served from last-good rows.
 	PreserveVersion bool `json:"-"`
 	// KeptLastGood marks a read that overlapped writes, served quietly from last-good
@@ -688,6 +690,8 @@ type Source struct {
 	// ReviewFacts is GitHub's current word on each bead's review waits (nil: none).
 	ReviewFacts func() map[string]ReviewFact
 	PRStates    func() map[string]string
+	// InvalidState is cmdrd's continuous state audit (nil: none).
+	InvalidState func() []InvalidState
 	// Chats is the state of each running native chat, by role (nil: none).
 	Chats func() map[string]ChatState
 	// Live lists the Operators running now (owner-label or agent names) and
@@ -958,6 +962,9 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	snap := BuildSnapshot(data, s.unread)
 	RefreshWorkflowHeads(&snap, s.PRHeads)
 	HoldRedMergeCards(&snap, s.PRHeads)
+	if s.InvalidState != nil {
+		snap.InvalidState = s.InvalidState()
+	}
 	if s.PRStates != nil {
 		snap.PRStates = s.PRStates()
 	}
