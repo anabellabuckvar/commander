@@ -74,7 +74,7 @@ for _ in $(seq 60); do
   sleep 1
 done
 
-"${PODMAN[@]}" run -d --pod "$NAME" --name "$NAME-cmdrd" --pids-limit "$PIDS" \
+"${PODMAN[@]}" run -d --init --pod "$NAME" --name "$NAME-cmdrd" --pids-limit "$PIDS" \
   -v "$NAME-home:/home/commander" "$IMAGE" >/dev/null
 
 echo "Commander engine: http://127.0.0.1:$PORT (pod $NAME: ${CPUS} CPUs, ${MEMORY} memory, ${PIDS} pids, home ${HOME_SIZE}, db ${PG_SIZE})"
