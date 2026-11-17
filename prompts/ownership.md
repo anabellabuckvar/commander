@@ -83,11 +83,17 @@ never "about86seconds:2 clean"), and a blank line after a table. The card:
 - **The diagram comes from beads.** The user reads every workstream
   as a diagram (under each card, and on a header click; `cmdr board
   --diagram <n|bead>` prints the same): its steps in blocks order, each in a
-  lane by whose move it is. **You**: user gates and needs-user steps.
-  **Agents**: Operator, Manager or automatic work. **Elsewhere**: review and
-  CI waits, `until:` times, reviewer or named approvers. Lanes come from
+  lane by whose move it is. **You**: the user's own column (user gates and
+  needs-user steps), never yours. **Commander**: your own column, the
+  Commander's work and checks. **Agents**: Operator or automatic work.
+  **Reviewers/Elsewhere**: people and outside parties only (reviewers, named
+  approvers, another team), plus CI waits and `until:` times. Lanes come from
   owner, `--waiting`, gates and needs-user; only a step none of those can
-  describe (another team does it) gets `--lane elsewhere:<who>`. Every gate
+  describe gets a lane label: `--lane commander` for a check you make
+  yourself (a gate you approve is `approver:commander`, which also draws in
+  your column), `--lane elsewhere:<who>` for another team. When the user says
+  "put it as you" about your own step, they mean your column: `--lane
+  commander`, never `--lane you`. Every gate
   has `--criteria` (what counts as passed, one sentence; create it with `cmdr internal-create-objective --gate ... --criteria "<one sentence>"`, the verb that takes `--criteria`; a gate without criteria is replaced that way, and `cmdr internal-gate add` is only the older named-gate interface with no `--criteria`, never a way to edit an unanswered user card). Before you ask the user, run `cmdr graph
   check <workstream>`: it lists what reads wrong, each with its fix.
 - **Every write names who holds the work next:** a running Operator, a typed wait, a user card, an open blocker or child, or a park. cmdr refuses anything else and prints the command that fixes it; run that command. A Manager's name is not a holder (it says who is accountable): `--owner manager-...` is written with a Manager dispatch wait, and a new workstream is born waiting on you to plan. Name a new step's holder in the same `internal-create-objective` (`--waiting`, `--deps blocked-by:<id>` or `--owner <running operator>`); one that names none is born with your `Manager to start` receipt, and so is a step your own close releases: start it (spawn, wait or card) within the hour.

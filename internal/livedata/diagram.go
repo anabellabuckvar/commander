@@ -567,6 +567,8 @@ func restingHand(s SnapStep) hand {
 			switch lane {
 			case beads.LaneYou:
 				return hand{ActorYou, ""}
+			case beads.LaneCommander:
+				return hand{ActorManager, ""}
 			case beads.LaneAgents:
 				return hand{ActorOperators, ""}
 			}
@@ -576,7 +578,7 @@ func restingHand(s SnapStep) hand {
 	switch {
 	case s.Owner == "user":
 		return hand{ActorYou, ""}
-	case strings.HasPrefix(s.Owner, "manager-"):
+	case strings.HasPrefix(s.Owner, "manager-"), isCommanderName(s.Owner):
 		return hand{ActorManager, ""}
 	}
 	return hand{ActorOperators, ""}
@@ -610,7 +612,8 @@ func approverHand(approvers []string) hand {
 func approverKind(a string) string {
 	a = strings.ToLower(a)
 	switch {
-	case strings.HasPrefix(a, "manager"):
+	case strings.HasPrefix(a, "manager"), isCommanderName(a):
+		// The Commander's own check is its column, never Reviewers (people).
 		return ActorManager
 	case strings.HasPrefix(a, "operator"), a == "agent", a == "agents":
 		return ActorOperators
@@ -618,6 +621,13 @@ func approverKind(a string) string {
 		return ActorAutomatic
 	}
 	return ActorReviewers
+}
+
+// isCommanderName: the Commander (or a planning Commander, "commander-...") as
+// an owner or approver.
+func isCommanderName(a string) bool {
+	a = strings.ToLower(strings.TrimSpace(a))
+	return a == "commander" || strings.HasPrefix(a, "commander-")
 }
 
 // waitHand is the hand of one recorded wait (the step's text already names
@@ -638,6 +648,26 @@ func waitHand(w string) hand {
 		return hand{ActorAutomatic, "the release tags prod"}
 	}
 	return hand{ActorAutomatic, "a timer, then the Manager confirms"}
+}
+
+// commanderOwn: the step is the Commander's own (its owner, its lane, or a
+// gate only the Commander approves).
+func commanderOwn(s SnapStep) bool {
+	if isCommanderName(s.Owner) {
+		return true
+	}
+	if lane, _, err := beads.ParseLane(s.Lane); err == nil && lane == beads.LaneCommander {
+		return true
+	}
+	if !s.Gate || len(s.Approvers) == 0 {
+		return false
+	}
+	for _, a := range s.Approvers {
+		if !isCommanderName(a) {
+			return false
+		}
+	}
+	return true
 }
 
 // CheckDiagram lists what keeps the graph under scope (a workstream, or a
@@ -667,7 +697,17 @@ func CheckDiagram(ws SnapWorkstream, scope string) []DiagramFinding {
 			if s.Lane != "" {
 				if _, _, err := beads.ParseLane(s.Lane); err != nil {
 					add("lane-label", s, "its label lane:"+s.Lane+" is not a lane, so the diagram ignores it",
-						"cmdr internal-set-objective --project "+ws.Project+" --bead "+s.BeadID+" --lane you|agents|elsewhere:<who> (or --lane none)", false)
+						"cmdr internal-set-objective --project "+ws.Project+" --bead "+s.BeadID+" --lane you|commander|agents|elsewhere:<who> (or --lane none)", false)
+				}
+			}
+			if lane, _, err := beads.ParseLane(s.Lane); err == nil && lane == beads.LaneYou && strings.HasPrefix(strings.ToLower(plainTitle(s.Title)), "commander ") {
+				add("commander-lane", s, "lane:you is the user's own column, but this is the Commander's step, so it draws in the user's column",
+					"cmdr internal-set-objective --project "+ws.Project+" --bead "+s.BeadID+" --lane commander", false)
+			}
+			if commanderOwn(s) {
+				if h := restingHand(s); h.actor == ActorYou || h.actor == ActorReviewers {
+					add("commander-lane", s, "it is the Commander's own step (owner, lane or approver commander), but the diagram draws it in the "+actorWords[h.actor]+" column",
+						"cmdr internal-set-objective --project "+ws.Project+" --bead "+s.BeadID+" --lane commander, and drop any lane:you or approver labels that name someone else", false)
 				}
 			}
 			if stepClosed(s) {

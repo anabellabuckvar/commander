@@ -5,17 +5,23 @@ import (
 	"strings"
 )
 
-// A lane is whose move a step is in the derived diagram: the user's, the
-// agents', or someone elsewhere (a reviewer, CI, a clock, another team). The
-// diagram derives it from owner, waits, gates and needs-user; the lane label
-// says it only where none of those can, e.g. a step another team will do:
+// A lane is whose move a step is in the derived diagram: the user's (Eric's
+// "You" column), the Commander's own ("Commander" column), the agents', or
+// someone elsewhere (reviewers: people, CI, a clock, another team). The diagram
+// derives it from owner, waits, gates and needs-user; the lane label says it
+// only where none of those can, e.g. a check the Commander makes itself or a
+// step another team will do:
 //
-//	lane:you | lane:agents | lane:elsewhere | lane:elsewhere:<who, EscapeLabel'd>
+//	lane:you | lane:commander | lane:agents | lane:elsewhere | lane:elsewhere:<who, EscapeLabel'd>
+//
+// "you" is always the user, never the Commander: the Commander's own step is
+// lane:commander.
 const LaneLabelPrefix = "lane:"
 
 // The lanes.
 const (
 	LaneYou       = "you"
+	LaneCommander = "commander"
 	LaneAgents    = "agents"
 	LaneElsewhere = "elsewhere"
 )
@@ -26,13 +32,13 @@ func ParseLane(v string) (lane, who string, err error) {
 	lane, who, _ = strings.Cut(strings.TrimSpace(v), ":")
 	who = strings.TrimSpace(UnescapeLabel(who))
 	switch lane {
-	case LaneYou, LaneAgents:
+	case LaneYou, LaneCommander, LaneAgents:
 		if who != "" {
 			return "", "", fmt.Errorf("lane %q: only elsewhere names who it is with (elsewhere:<who>)", v)
 		}
 	case LaneElsewhere:
 	default:
-		return "", "", fmt.Errorf("lane %q: want you, agents, elsewhere or elsewhere:<who>", v)
+		return "", "", fmt.Errorf("lane %q: want you, commander, agents, elsewhere or elsewhere:<who>", v)
 	}
 	return lane, who, nil
 }

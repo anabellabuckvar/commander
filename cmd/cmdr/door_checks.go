@@ -727,7 +727,7 @@ func laneFlagValue(v string) (string, error) {
 	}
 	lane, who, err := beads.ParseLane(v)
 	if err != nil {
-		return "", fmt.Errorf("--lane %q is not a lane, so the diagram would ignore it. Use --lane you, agents, elsewhere or elsewhere:<who in plain words> (e.g. elsewhere:the finance team), or --lane none", v)
+		return "", fmt.Errorf("--lane %q is not a lane, so the diagram would ignore it. Use --lane you (the user's own column), commander (your own column, the Commander's), agents, elsewhere or elsewhere:<who in plain words> (e.g. elsewhere:the finance team), or --lane none", v)
 	}
 	return strings.TrimPrefix(beads.LaneLabel(lane, who), beads.LaneLabelPrefix), nil
 }

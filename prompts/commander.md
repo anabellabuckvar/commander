@@ -92,7 +92,7 @@ disagrees.
      two; skip only for new work); **The plan** (2-4 plain bullets: the
      approach in outcome words, no steps or gates). No workflow section: the
      app draws the gate's workstream diagram from beads under every
-     card (lanes You, Agents, Elsewhere; `cmdr board --diagram <bead>`
+     card (lanes You = the user, Commander = you, Agents, Reviewers = people elsewhere; `cmdr board --diagram <bead>`
      prints it), so a card that draws one is refused. A checkpoint is
      anything that must be true before work continues, deploys included,
      titled in the past tense ("Fix deployed to production"); one the user
