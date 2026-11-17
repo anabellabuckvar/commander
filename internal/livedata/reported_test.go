@@ -31,11 +31,11 @@ func TestBoardReportedOperatorGap(t *testing.T) {
 	want := map[string]string{
 		"app-w1":  resultReviewText,
 		"app-w2":  "Working on build the next wave",
-		"app-w3":  "Agent stopped on trace the slow query: the Manager's move",
-		"app-w4":  "Manager review overdue",
+		"app-w3":  "Agent stopped on trace the slow query",
+		"app-w4":  "Finished but not closed",
 		"app-w5":  resultReviewText,
 		"app-w6":  resultReviewText,
-		"app-w7":  "Agent stopped on split the worker: the Manager's move",
+		"app-w7":  "Agent stopped on split the worker",
 		"app-w.8": resultReviewText,
 		"app-w9":  "State missing",
 	}

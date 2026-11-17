@@ -7,13 +7,13 @@ import (
 	"github.com/example-user/commander/internal/beads"
 )
 
-const managerPlanningText = "Manager planning"
+const managerPlanningText = "Steps not planned yet"
 
-const resultReviewText = "Result ready for Manager review"
-const approvalDispatchText = "Approved; Manager dispatch pending"
-const approvalDispatchOverdueText = "Approved work not started; Manager recovery needed"
-const startPendingText = "Manager to start the next step"
-const startOverdueText = "Next step not started; Manager recovery needed"
+const resultReviewText = "Finished; closing it"
+const approvalDispatchText = "Approved; starting an agent"
+const approvalDispatchOverdueText = "Approved work not started"
+const startPendingText = "Starting the next step"
+const startOverdueText = "Next step not started"
 
 // handoffs are the Manager custody receipts (beads.IsManagerHandoff) and what
 // a row reads while each is pending and once it is overdue, in the order a
@@ -21,8 +21,8 @@ const startOverdueText = "Next step not started; Manager recovery needed"
 var handoffs = []struct{ ref, pending, overdue string }{
 	{beads.ManagerDispatchWait, approvalDispatchText, approvalDispatchOverdueText},
 	{beads.ManagerStartWait, startPendingText, startOverdueText},
-	{beads.ManagerCloseWait, resultReviewText, "Manager review overdue"},
-	{beads.ManagerPlanWait, managerPlanningText, "Manager planning deadline missed"},
+	{beads.ManagerCloseWait, resultReviewText, "Finished but not closed"},
+	{beads.ManagerPlanWait, managerPlanningText, "Steps still not planned"},
 	{beads.ManagerRecoverWait, "Agent recovery required", "Agent recovery deadline missed"},
 }
 

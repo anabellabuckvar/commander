@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -90,7 +91,9 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 		actor = "waiting_on_step"
 	}
 	text, signal, ok := describe(key, actor, row.Lead.Reason, Opener(row.Lead), facts)
-	if !ok || addsClaims(text, row.Lead) {
+	// The word Commander only on a Commander step: a written line naming it for
+	// anyone else's step is dropped for the structured line.
+	if !ok || addsClaims(text, row.Lead) || (row.Lead.Actor != nextactor.Commander && namesCommander(text)) {
 		// The rule-based line, from the structured lead: a written line may only
 		// say it shorter, never claim a state ("idle", "stalled") the lead does
 		// not hold.
@@ -348,3 +351,8 @@ func noteDisagreement(key, signal string) {
 	disagreements.at[k] = time.Now()
 	log.Printf("state check: %s reads working by the rules, but its agent activity says %s", key, signal)
 }
+
+var commanderWord = regexp.MustCompile(`(?i)\b(commander|manager)\b`)
+
+// namesCommander: text names the Commander (or a Manager) as an actor.
+func namesCommander(text string) bool { return commanderWord.MatchString(text) }

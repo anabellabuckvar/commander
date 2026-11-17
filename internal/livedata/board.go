@@ -348,6 +348,7 @@ func (b board) row(ws SnapWorkstream) BoardRow {
 	b.addNeedsYouLane(ws, &r)
 	showPendingReviews(ws, &r)
 	b.addInvalidState(ws, &r)
+	b.addActorChecks(ws, &r)
 	if g := gateVMOf(ws, b.needsIDs, asks); g != nil {
 		r.Gate = &BoardGate{BeadID: g.beadID, Title: g.title, Who: g.who, At: g.at, ForYou: g.forYou}
 	}
@@ -1015,7 +1016,7 @@ func (b board) pitchLine(ws SnapWorkstream, busy bool) (line, bool) {
 			return line{kind: "waiting", text: "Commander to review the proposed " + p.Proposed + " on " + what, since: p.ProposedAt}, true
 		}
 		if p.AskedAt > 0 && b.now-p.AskedAt >= pitchDeadline {
-			return line{kind: "stalled", text: "Pitch for " + what + " still not written: the Manager's move", since: p.AskedAt}, true
+			return line{kind: "stalled", text: "Invalid state: no card written yet for " + what, since: p.AskedAt}, true
 		}
 		kind := "waiting"
 		if busy {
@@ -1030,19 +1031,19 @@ func (b board) pitchLine(ws SnapWorkstream, busy bool) (line, bool) {
 func goneLine(units []SnapStep) (line, bool) {
 	for _, s := range units {
 		if !stepClosed(s) && s.OwnerState == "died" {
-			return line{kind: "stalled", text: "Agent stopped on " + lower(plainTitle(s.Title)) + ": the Manager's move", since: s.OwnerSince, why: s.OwnerWhy}, true
+			return line{kind: "stalled", text: "Agent stopped on " + lower(plainTitle(s.Title)), since: s.OwnerSince, why: s.OwnerWhy}, true
 		}
 	}
 	for _, s := range units {
 		if !stepClosed(s) && s.OwnerState == "finished" {
-			return line{kind: "stalled", text: "Agent finished " + lower(plainTitle(s.Title)) + ", step not closed: the Manager's move", since: s.OwnerSince, why: s.OwnerWhy}, true
+			return line{kind: "stalled", text: "Agent finished " + lower(plainTitle(s.Title)) + "; closing it", since: s.OwnerSince, why: s.OwnerWhy}, true
 		}
 	}
 	return line{}, false
 }
 
 // notPlannedText is the line of a workstream or track with no step yet.
-const notPlannedText = "Not started: Manager to plan"
+const notPlannedText = "Not started: nothing planned yet"
 
 // hasPlan: steps hold at least one planned step, open or done. Superseded steps
 // and an agent's task beads are no plan.
@@ -1084,7 +1085,7 @@ func stalledWork(open, leaves []SnapStep) (line, bool) {
 	// track, the sign-off step under it), so every open step is read, not just leaves.
 	for _, s := range open {
 		if s.ReviewFact != nil && s.ReviewFact.Acted {
-			return line{kind: "stalled", text: s.ReviewFact.Text + ": the Manager's move"}, true
+			return line{kind: "stalled", text: s.ReviewFact.Text + "; next step starting"}, true
 		}
 	}
 	if slices.ContainsFunc(open, func(s SnapStep) bool { return s.ReviewFact != nil && s.ReviewFact.NoPR }) {

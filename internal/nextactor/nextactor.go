@@ -56,6 +56,18 @@ type Bead struct {
 	// this step (lane commander, blocked on it): a finished result waiting on the
 	// Commander points at that step, never at a hidden review.
 	CheckStep string
+	// Lane is the step's lane label (you, agents, commander, elsewhere[:who]).
+	Lane string
+	// Container: a workstream or track (it holds steps), never a step an agent runs.
+	Container bool
+	// ReviewStep: an independent review step, run by a review agent.
+	ReviewStep bool
+	// NoBrief: no description or acceptance, so no agent can be started on it.
+	NoBrief bool
+	// ResultClean: the result is a clean final report, which closes the step
+	// itself; ResultLine is its first line.
+	ResultClean bool
+	ResultLine  string
 	// CardsKnown: NeedsUser was computed from the user's real NEEDS YOU list, so a
 	// user wait with no listed card is the Commander's move (put the card up), not the user's.
 	CardsKnown       bool
@@ -209,9 +221,8 @@ func userWait(b Bead) *beads.Wait {
 // writing it down is the planning Commander's move, not a decision the user
 // can make.
 func recordQuestion(b Bead, ctx Context) Result {
-	r := commanderOwed(b, ctx, "record_question", "write down what "+quoted(b.Title)+" needs from you", unix(userWait(b).Since))
-	r.Bead = b.ID
-	return r
+	return Result{Actor: Stuck, Reason: InvalidPrefix + "no-card", Since: unix(userWait(b).Since), Bead: b.ID,
+		Text: "Invalid state: " + quoted(b.Title) + " waits on you but has no card"}
 }
 
 func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
@@ -267,12 +278,36 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 		}
 		return Result{Actor: Agent, Reason: "queued", Text: "Queued for the next free agent", Bead: b.ID}
 	}
-	what := "plan the next step"
-	if b.Stopped {
-		what = "re-plan the step whose agent it stopped"
+	return unowned(b)
+}
+
+// InvalidPrefix starts the reason of a state the bead structure does not allow:
+// the board shows it red and the Commander fixes the beads.
+const InvalidPrefix = "invalid:"
+
+// unowned is an open step nothing else settles: its owner tag says who moves.
+// An agent step is queued for an agent (cmdrd starts one); anything else with
+// no move is an invalid state, never a made-up Commander line.
+func unowned(b Bead) Result {
+	r := Result{Bead: b.ID, Since: b.ProgressAt}
+	lane := b.Lane
+	switch {
+	case b.Stopped:
+		r.Actor, r.Reason, r.Text = Stuck, "agent_stopped", "Stopped: the agent on "+quoted(b.Title)+" was stopped"
+	case b.Container:
+		r.Actor, r.Reason, r.Text = Stuck, InvalidPrefix+"no-open-step", "Invalid state: nothing open under "+quoted(b.Title)
+	case lane == "you":
+		r.Actor, r.Reason, r.Text = Stuck, InvalidPrefix+"no-card", "Invalid state: "+quoted(b.Title)+" is yours but has no card"
+	case strings.HasPrefix(lane, "elsewhere"):
+		who := strings.TrimPrefix(strings.TrimPrefix(lane, "elsewhere"), ":")
+		r.Actor, r.Reason, r.Text = External, "elsewhere", "Waiting on "+firstNonEmpty(who, "someone outside")+": "+quoted(b.Title)
+	case b.NoBrief:
+		r.Actor, r.Reason, r.Text = Stuck, InvalidPrefix+"no-brief", "Invalid state: "+quoted(b.Title)+" has no description and acceptance, so no agent can start"
+	case b.ReviewStep:
+		r.Actor, r.Reason, r.Text = Agent, "ready", "Queued for a review agent: "+quoted(b.Title)
+	default:
+		r.Actor, r.Reason, r.Text = Agent, "ready", "Queued for an agent: "+quoted(b.Title)
 	}
-	r = commanderOwed(b, ctx, "plan", what, b.ProgressAt) // owed since the bead last moved
-	r.Bead = b.ID
 	return r
 }
 
@@ -280,7 +315,7 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 // no report) that an open blocker on the same step supersedes.
 func answeredByBlocker(r Result) bool {
 	switch strings.TrimPrefix(r.Reason, "commander_idle:") {
-	case "review_result", "agent_stopped", "exited_without_report":
+	case "review_result", "agent_stopped", "exited_without_report", "result_accepting", "agent_blocked":
 		return true
 	}
 	return false
@@ -321,7 +356,7 @@ func own(b Bead, ctx Context) Result {
 	case b.Superseded || b.Withdrawn:
 		return Result{Actor: None, Reason: "withdrawn", Text: "Withdrawn"}
 	case b.HumanAnswerPending:
-		return commanderOwed(b, ctx, "apply_answer", "apply your recorded answer", 0)
+		return Result{Actor: Agent, Reason: "apply_answer", Who: "cmdrd", Text: "Applying your answer to " + quoted(b.Title)}
 	case b.Status == beads.StatusDeferred || b.Held:
 		text := "Paused"
 		if b.HoldReason != "" {
@@ -339,7 +374,7 @@ func own(b Bead, ctx Context) Result {
 	case b.NeedsUser:
 		return Result{Actor: User, Reason: "decision", Text: "Needs you: " + firstNonEmpty(b.UserAsk, b.Title)}
 	case b.PendingQuestions > 0 || b.QuestionWaiting:
-		return commanderOwed(b, ctx, "answer_question", "answer an agent's question", 0)
+		return Result{Actor: Stuck, Reason: "agent_question", Who: b.ExecRole, Text: "The agent on " + quoted(b.Title) + " waits on an answer to its question"}
 	case b.LaunchFailed:
 		return Result{Actor: Stuck, Reason: "launch_failed", Who: b.ExecRole, Text: "Stuck: the agent could not start" + suffix(b.LaunchError)}
 	case b.StopReason != "" && !b.Executing && !b.Unverified && !b.ReadyQueued:
@@ -363,7 +398,7 @@ func own(b Bead, ctx Context) Result {
 				return w
 			}
 			if now-b.ExecActiveAt > int64(NoProgressStuck/time.Second) {
-				return commanderOwed(b, ctx, "idle_agent", "tell the idle agent on "+quoted(b.Title)+" what to do next", b.ExecActiveAt+int64(NoProgressStuck/time.Second)) // owed once the idle limit passed
+				return Result{Actor: Stuck, Reason: "idle_agent", Who: b.ExecRole, Since: b.ExecActiveAt, Text: fmt.Sprintf("Stuck: the agent on %s has been idle for %s", quoted(b.Title), ago(now-b.ExecActiveAt))}
 			}
 		} else if b.ExecActiveAt > 0 {
 			// In a turn, its own events say whether it is working: quiet for the
@@ -391,11 +426,13 @@ func own(b Bead, ctx Context) Result {
 		return Result{Actor: Agent, Reason: "starting", Who: b.ExecRole, Since: b.UnverifiedSince, Text: "Starting an agent on " + quoted(b.Title)}
 	// A step whose agent the Commander stopped holds that agent's save-and-stop
 	// note, not a deliverable: re-planning is owed, never a review.
+	// A finished agent step closes itself on a clean final report (cmdrd
+	// accepts it); review happens only in an explicit review step.
 	case b.ResultReady && !b.Stopped:
-		if b.CheckStep != "" {
-			return commanderOwed(b, ctx, "review_result", "check "+quoted(b.CheckStep), b.ResultSince)
+		if b.ResultClean {
+			return Result{Actor: Agent, Reason: "result_accepting", Who: b.ExecRole, Since: b.ResultSince, Text: "Finished " + quoted(b.Title) + "; closing it"}
 		}
-		return commanderOwed(b, ctx, "review_result", "review the finished result", b.ResultSince)
+		return Result{Actor: Stuck, Reason: "agent_blocked", Who: b.ExecRole, Since: b.ResultSince, Text: "The agent on " + quoted(b.Title) + " ended blocked: " + firstNonEmpty(b.ResultLine, "no clean final report")}
 	}
 	return waits(b, ctx)
 }
@@ -416,7 +453,7 @@ func waits(b Bead, ctx Context) Result {
 			}
 			if b.CardsKnown && !b.NeedsUser {
 				// The row may only say "Needs you" when the card is on the user's list.
-				return commanderOwed(b, ctx, "card_missing", "put "+quoted(b.UserAsk)+" on your list", unix(w.Since))
+				return Result{Actor: Stuck, Reason: InvalidPrefix + "no-card", Since: unix(w.Since), Text: "Invalid state: " + quoted(b.UserAsk) + " waits on you but has no card"}
 			}
 			return Result{Actor: User, Reason: "waiting_user", Since: unix(w.Since), Text: "Needs you: " + b.UserAsk}
 		case beads.IsManagerHandoff(w):
@@ -443,7 +480,7 @@ func waits(b Bead, ctx Context) Result {
 		return Result{Actor: External, Reason: "wait:" + external.Kind, Who: waitWho(*external), Since: unix(external.Since), Text: "Waiting on " + waitWho(*external)}
 	}
 	if due != nil {
-		return commanderOwed(b, ctx, "wait_over", "act on "+quoted(due.Text()), max(unix(due.Since), unix(due.Until))) // owed from when the date came, not when it was set
+		return Result{Actor: Agent, Reason: "wait_over", Since: max(unix(due.Since), unix(due.Until)), Text: "Wait over (" + due.Text() + "): resuming " + quoted(b.Title)}
 	}
 	return Result{}
 }

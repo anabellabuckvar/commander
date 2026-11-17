@@ -16,13 +16,13 @@ func TestEmptyScopeNeverReadsNothingToDo(t *testing.T) {
 	r = boardWS(func(w *SnapWorkstream) {
 		w.Waiting, w.WaitSince, w.WaitUntil, w.WaitUntilAs = beads.ManagerPlanWait, caseNow-60, caseNow+120, beads.ManagerPlanWait
 	})
-	expectLine(t, r, "waiting", "Manager planning")
+	expectLine(t, r, "waiting", "Steps not planned yet")
 
 	// The handoff window passing does not turn the plan wait into nothing: the Manager still owes the plan.
 	r = boardWS(func(w *SnapWorkstream) {
 		w.Waiting, w.WaitSince, w.WaitUntil, w.WaitUntilAs = beads.ManagerPlanWait, caseNow-600, caseNow-300, beads.ManagerPlanWait
 	})
-	expectLine(t, r, "waiting", "Manager planning")
+	expectLine(t, r, "waiting", "Steps not planned yet")
 }
 
 // A scope whose work is all finished is a stage to close, not a birth without a holder.

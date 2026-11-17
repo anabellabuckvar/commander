@@ -97,7 +97,7 @@ func TestRecoveryUsesSelectedHandoff(t *testing.T) {
 		ws := SnapWorkstream{BeadID: "sample-flow", ManagerRole: "manager-sample-flow", Steps: steps}
 		l, ok := resultHandoff(steps, 100)
 		l = recoveryLine(l, ws)
-		if !ok || l.text != "Manager review overdue" || !strings.Contains(l.why, "existing report") || !strings.Contains(l.why, "on sample-flow.overdue.") || strings.Contains(l.why, "on sample-flow.pending") {
+		if !ok || l.text != "Finished but not closed" || !strings.Contains(l.why, "existing report") || !strings.Contains(l.why, "on sample-flow.overdue.") || strings.Contains(l.why, "on sample-flow.pending") {
 			t.Fatalf("cause/action/target disagree: %+v", l)
 		}
 	}

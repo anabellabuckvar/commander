@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"github.com/example-user/commander/internal/nextactor"
 	"strings"
 	"testing"
 	"time"
@@ -19,27 +20,19 @@ func TestActiveBoardPlanningObligationDoesNotInventAgentActivity(t *testing.T) {
 		d := Board(s, now)
 		applyExecutionCounts(&s, &d)
 		row := d.Workstreams[0]
-		if row.Kind != "waiting" || row.Text != "Commander to plan the next step" || row.Working != 0 || row.PlanningCommander != "commander-focused" || row.Actor == nil || row.Actor.Lead.Who != "commander-focused" {
-			t.Fatal("a retired Manager's activity leaked into the row", row)
+		if row.Text != "Queued for an agent: “Work”" || row.Working != 0 || row.Actor == nil || row.Actor.Lead.Actor == nextactor.Commander {
+			t.Fatal("an agent step with nothing holding it is queued for an agent, never the Commander's", row)
 		}
 		if violations := SnapshotViolations(s); len(violations) != 0 {
 			t.Fatal("recorded planning responsibility became broken state", violations)
 		}
 	}
-	// The responsible Commander idle well past the grace: the row says it is stuck.
-	s.Agents["commander-focused"] = SnapAgent{State: store.AgentIdle, Since: 1}
-	if row := Board(s, 86400).Workstreams[0]; row.Kind != "stuck" || !strings.HasPrefix(row.Text, "Stuck: Commander has not started to plan") {
-		t.Fatal("an idle Commander owing a move was concealed", row)
-	}
-	// In a turn on other work it still only owes the move: yellow.
-	s.Agents["commander-focused"] = SnapAgent{State: store.AgentWorking, Since: 86000, Detail: "Bash: cmdr plan apply --bead other"}
-	if row := Board(s, 86400).Workstreams[0]; row.Kind != "waiting" || row.Text != "Commander to plan the next step" {
-		t.Fatal("a Commander busy elsewhere is shown working on this", row)
-	}
-	// Its activity is on this step: green.
-	s.Agents["commander-focused"] = SnapAgent{State: store.AgentWorking, Since: 86000, Detail: "Bash: cmdr plan apply --bead leaf"}
-	if row := Board(s, 86400).Workstreams[0]; row.Kind != "working" || row.Text != "Commander: plan the next step" {
-		t.Fatal("a Commander working on this step is not shown working", row)
+	// Whatever the Commander is doing, the step is not its move.
+	for _, a := range []SnapAgent{{State: store.AgentIdle, Since: 1}, {State: store.AgentWorking, Since: 86000, Detail: "Bash: cmdr plan apply --bead leaf"}} {
+		s.Agents["commander-focused"] = a
+		if row := Board(s, 86400).Workstreams[0]; row.Text != "Queued for an agent: “Work”" {
+			t.Fatal("the Commander's activity changed an agent step's line", row)
+		}
 	}
 }
 
@@ -48,8 +41,8 @@ func TestActiveBoardPreservesWaitsHoldsAndRealDecisionPriority(t *testing.T) {
 	ws := &s.Workstreams[0]
 	s.Agents["commander-focused"] = SnapAgent{State: store.AgentWorking}
 	ws.Steps[0].TypedWaits = []beads.Wait{{Kind: beads.WaitUntil, Ref: beads.ManagerCloseWait, Until: time.Unix(86000, 0), Since: time.Unix(1, 0)}}
-	if row := Board(s, 86400).Workstreams[0]; !strings.HasPrefix(row.Text, "Commander to act on") || row.Kind != "waiting" {
-		t.Fatal("a legacy Manager receipt is not Commander-owed work", row)
+	if row := Board(s, 86400).Workstreams[0]; !strings.HasPrefix(row.Text, "Wait over") || row.Kind != "working" {
+		t.Fatal("a passed legacy receipt resumes the step", row)
 	}
 	ws.Steps[0].TypedWaits = []beads.Wait{{Kind: beads.WaitCI, PR: 41, Since: time.Unix(80000, 0)}}
 	if row := Board(s, 86400).Workstreams[0]; row.Kind != "waiting" || !strings.Contains(row.Text, "Waiting on CI #41") {
@@ -62,7 +55,7 @@ func TestActiveBoardPreservesWaitsHoldsAndRealDecisionPriority(t *testing.T) {
 	ws.Hold = false
 	ws.Steps[0].TypedWaits = nil
 	ws.HumanAnswerPending = true
-	if row := Board(s, 86400).Workstreams[0]; row.Kind == "needs" || !strings.Contains(row.Text, "apply your recorded answer") {
+	if row := Board(s, 86400).Workstreams[0]; row.Kind == "needs" || !strings.Contains(row.Text, "Applying your answer") {
 		t.Fatal("saved answer asked twice", row)
 	}
 	ws.HumanAnswerPending = false

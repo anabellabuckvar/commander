@@ -5,9 +5,9 @@
 4 working on now step: Working on write the parser (0% done, no gates, 1 working, for 2m)
 5 working operator: Working on port the tests (0% done, no gates, 2 working)
 6 working no step: Working (0% done, no gates, 1 working, for 2m)
-7 agent died: Agent stopped on fix the build: the Manager's move (0% done, no gates) · why: Automation failure: Agent stopped on fix the build: the Manager's move. Owner: manager-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w7.1. Commander owns escalation if recovery fails.
-8 agent finished: Agent finished fix the lint, step not closed: the Manager's move (0% done, no gates) · why: Automation failure: Agent finished fix the lint, step not closed: the Manager's move. Owner: manager-w8. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w8.1. Commander owns escalation if recovery fails.
-9 review acted: a-reviewer approved #12: the Manager's move (0% done, no gates) · why: Automation failure: a-reviewer approved #12: the Manager's move. Owner: manager-w9. Next: inspect current evidence and record the next guarded recovery action on w9. Commander owns escalation if recovery fails.
+7 agent died: Agent stopped on fix the build (0% done, no gates) · why: Automation failure: Agent stopped on fix the build. Owner: manager-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w7.1. Commander owns escalation if recovery fails.
+8 agent finished: Agent finished fix the lint; closing it (0% done, no gates) · why: Automation failure: Agent finished fix the lint; closing it. Owner: manager-w8. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w8.1. Commander owns escalation if recovery fails.
+9 review acted: a-reviewer approved #12; next step starting (0% done, no gates) · why: Automation failure: a-reviewer approved #12; next step starting. Owner: manager-w9. Next: inspect current evidence and record the next guarded recovery action on w9. Commander owns escalation if recovery fails.
 10 review no pr: Waiting for a review of no PR: nothing can clear it (0% done, no gates) · why: Automation failure: Waiting for a review of no PR: nothing can clear it. Owner: manager-w10. Next: inspect current evidence and record the next guarded recovery action on w10. Commander owns escalation if recovery fails.
 11 review pending: Waiting for review: waiting on a-reviewer (#12) (0% done, no gates)
 12 recorded wait: Waiting for review (0% done, no gates, for 2h)
@@ -61,15 +61,15 @@
 48 wait outside the gate's work: Waiting for example-auth-config · 04:33 AM (0% done, next gate: Rule approved, approved by a-reviewer, for 20m)
 49 wait on a container: Waiting for review (0% done, no gates, for 15m)
 50 deferred gate first: Working on w50.1 · then: tier 1 passed (0% done, next gate: Tier 1 passed, approved by you, 2 working)
-51 agent died before gate: Agent stopped on run the audit: the Manager's move (0% done, next gate: Audit reviewed, approved by a-reviewer) · why: Automation failure: Agent stopped on run the audit: the Manager's move. Owner: manager-w51. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w51.1. Commander owns escalation if recovery fails.
-52 finished, manager to close: Result ready for Manager review (0% done, no gates, for 10m)
-53 finished before gate, manager to close: Result ready for Manager review (0% done, next gate: Build reviewed, approved by a-reviewer, for 10m)
+51 agent died before gate: Agent stopped on run the audit (0% done, next gate: Audit reviewed, approved by a-reviewer) · why: Automation failure: Agent stopped on run the audit. Owner: manager-w51. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on w51.1. Commander owns escalation if recovery fails.
+52 finished, manager to close: Finished; closing it (0% done, no gates, for 10m)
+53 finished before gate, manager to close: Finished; closing it (0% done, next gate: Build reviewed, approved by a-reviewer, for 10m)
 54 time wait passed: Stalled (0% done, next gate: Merge approval, approved by a-reviewer) · why: Automation failure: no live worker or recorded next action. Owner: manager-w54. Next: inspect current evidence and record the next guarded recovery action on w54. Commander owns escalation if recovery fails.
 55 long wait label: Waiting for the slow pages safety… · 04:33 AM (0% done, no gates, for 10m)
 56 long card title: Needs you: Does the team approve scope for automating… (0% done, no gates, ⚑ 1)
 57 open card with live login: Needs you: Sign in to the service (0% done, no gates, ⚑ 1, 2 working)
   57.1 Login track: Needs you: Sign in to the service (0% done, 1 working)
-  57.2 Other track: Not started: Manager to plan (0% done)
+  57.2 Other track: Not started: nothing planned yet (0% done)
 Needs you (12):
   #1 Which name should the service use? (needs card)
   #2 Merge approval (needs your gate)

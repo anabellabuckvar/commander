@@ -99,7 +99,7 @@ func TestWorkflow_StepWords(t *testing.T) {
 		"lab-ops.1": "working|Agent working",
 		"lab-ops.2": "waiting|Waiting for review",
 		"lab-ops.3": "idle|Not started",
-		"lab-ops.4": "stalled|Agent stopped: the Manager's move",
+		"lab-ops.4": "stalled|Agent stopped",
 	} {
 		s := findStep(w.Steps, id)
 		if s == nil || s.Kind+"|"+s.Text != want {

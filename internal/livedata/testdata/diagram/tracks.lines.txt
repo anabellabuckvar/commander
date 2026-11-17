@@ -4,11 +4,11 @@ Report exports (lab-bex)
   [Nobody] Backfill last quarter: State missing (lab-bex.4)
   [Automatic, parked until Tue 11:20 AM, then the Manager picks it up] Retention policy written: Parked until Tue 11:20 AM (lab-bex.6)
   [Operators] Key rotation scheduled: Not started (lab-bex.8) after lab-bex.7
-  [Manager] Export docs updated: Result ready for Manager review (lab-bex.9)
+  [Operators] Export docs updated: Finished; closing it (lab-bex.9)
   [Automatic, CI, runs on each push to the PR] [workstream] Nightly export to the warehouse: Waiting for CI · 1 of 5 done (lab-bex.2) after lab-bex.1
 ▶ [You] [workstream] Finance sign-off on the export format: Needs you: Name export files by date or by batch? · 0 of 4 done (lab-bex.3) after lab-bex.1
   [Operators] Rotate the export key: Not started (lab-bex.7) after lab-bex.8
-  [Manager] [gate, manager] Approve the rollout?: Not reached (lab-bex.5) after lab-bex.2, lab-bex.3
+  [Operators, manager] [gate, manager] Approve the rollout?: Not reached (lab-bex.5) after lab-bex.2, lab-bex.3
       passes when: Both tracks are done.
 
   Nightly export to the warehouse (lab-bex.2)
@@ -36,12 +36,12 @@ Report exports (lab-bex)
 
 #2 On-call tooling
 On-call tooling (lab-ops)
-  [Manager] Alert router rewritten: Agent stopped: the Manager's move (lab-ops.1)
+  [Operators] Alert router rewritten: Agent stopped (lab-ops.1)
   [Reviewers, oncall-team] [gate, oncall-team] Runbook signed off by the on-call team: Waiting for oncall-team (lab-ops.2)
       passes when: (no criteria)
 ▶ [You] Rotate the shared pager number: Needs you (lab-ops.3)
-  [Manager] Paging config drafted: Manager working (lab-ops.4)
-  [Automatic, a timer, then the Manager confirms] Pager vendor contract renewed: Waiting for renewal lands · 09:26 PM (lab-ops.5)
+  [Operators] Paging config drafted: Manager working (lab-ops.4)
+  [Automatic, a timer] Pager vendor contract renewed: Waiting for renewal lands · 09:26 PM (lab-ops.5)
   [You] [gate, you] Greenlight shipping the paging change: Not reached (lab-ops.7) after lab-ops.6
       passes when: The user says ship.
   [Operators] Paging change released: Stalled (lab-ops.6) after lab-ops.4, lab-ops.7

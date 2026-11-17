@@ -165,6 +165,8 @@ type SnapWorkstream struct {
 	PlanningPending      bool            `json:"planning_pending,omitempty"`
 	ResultRunID          int64           `json:"result_run_id,omitempty"`
 	ResultReadyAt        int64           `json:"result_ready_at,omitempty"`
+	ResultLine           string          `json:"result_line,omitempty"` // the result's first line
+	NoBrief              bool            `json:"no_brief,omitempty"`    // no description or acceptance: no agent can start
 	BlockedBy            []string        `json:"blocked_by,omitempty"`
 	QuestionWaiting      bool            `json:"question_waiting,omitempty"`
 	HumanAnswerPending   bool            `json:"human_answer_pending,omitempty"`
@@ -262,6 +264,8 @@ type SnapStep struct {
 	PlanningPending      bool                    `json:"planning_pending,omitempty"`
 	ResultRunID          int64                   `json:"result_run_id,omitempty"`
 	ResultReadyAt        int64                   `json:"result_ready_at,omitempty"`
+	ResultLine           string                  `json:"result_line,omitempty"`
+	NoBrief              bool                    `json:"no_brief,omitempty"`
 	QuestionWaiting      bool                    `json:"question_waiting,omitempty"`
 	HumanAnswerPending   bool                    `json:"human_answer_pending,omitempty"`
 	ExecutionMode        string                  `json:"execution_mode,omitempty"`
@@ -605,7 +609,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 		o := n.Row
 		st := SnapStep{
 			Hold: o.Hold, HoldReason: o.HoldReason, Withdrawn: o.Withdrawn, ProgressAt: o.ProgressAt, TypedWaits: o.Waits, Runtime: o.Runtime,
-			ResultRunID: o.ResultRunID, ResultReadyAt: o.ResultReadyAt, QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
+			ResultRunID: o.ResultRunID, ResultReadyAt: o.ResultReadyAt, ResultLine: o.ResultLine, NoBrief: o.NoBrief, QuestionWaiting: o.QuestionWaiting, HumanAnswerPending: o.HumanAnswerPending,
 			ExecutionMode: o.ExecutionMode, ExecutionEligible: o.ExecutionEligible, ExecutionReady: o.ExecutionReady, ExecutionReserved: o.ExecutionReserved, ExecutionCapable: o.ExecutionCapable, ExecutionAttempts: o.ExecutionAttempts, ExecutionError: o.ExecutionError,
 			PlanningPending: o.PlanningPending, PlanningCommander: o.PlanningCommander, JurisdictionRevision: o.JurisdictionRevision,
 			WorkflowCheck: o.WorkflowCheck, BeadID: o.BeadID, Title: o.Title, State: o.State, Status: o.Status, Owner: o.Owner, OwnerState: o.OwnerState,

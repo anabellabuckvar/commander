@@ -110,16 +110,18 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 		revision, run, at int64
 		responsible       string
 		live              bool
+		line              string
+		brief             bool
 	}
 	reports := map[key]report{}
-	resultRows, err := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,CASE WHEN b.result_run_id=b.active_run_id THEN b.result_run_id ELSE 0 END,b.result_ready_at,b.responsible_agent_id,EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running') FROM bead_tasks b WHERE b.deleted_at IS NULL`)
+	resultRows, err := st.DB().QueryContext(ctx, `SELECT b.project_id,b.id,b.plan_revision,CASE WHEN b.result_run_id=b.active_run_id THEN b.result_run_id ELSE 0 END,b.result_ready_at,b.responsible_agent_id,EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running'),split_part(LEFT(ltrim(COALESCE(b.result_summary,'')),400),chr(10),1),(COALESCE(b.description,'')<>'' AND COALESCE(b.acceptance_criteria,'')<>'') FROM bead_tasks b WHERE b.deleted_at IS NULL`)
 	if err != nil {
 		return "", err
 	}
 	for resultRows.Next() {
 		var k key
 		var v report
-		if err = resultRows.Scan(&k.project, &k.bead, &v.revision, &v.run, &v.at, &v.responsible, &v.live); err != nil {
+		if err = resultRows.Scan(&k.project, &k.bead, &v.revision, &v.run, &v.at, &v.responsible, &v.live, &v.line, &v.brief); err != nil {
 			resultRows.Close()
 			return "", err
 		}
@@ -134,8 +136,11 @@ func attachExecutionState(ctx context.Context, st *store.Store, rows []Objective
 		row := &rows[i]
 		row.ResultRunID, row.ResultReadyAt = 0, 0
 		row.PlanningPending = false
+		if v, ok := reports[key{row.ProjectID, row.BeadID}]; ok {
+			row.NoBrief = !v.brief
+		}
 		if v, ok := reports[key{row.ProjectID, row.BeadID}]; ok && v.revision == row.PlanRevision {
-			row.ResultRunID, row.ResultReadyAt = v.run, v.at
+			row.ResultRunID, row.ResultReadyAt, row.ResultLine = v.run, v.at, v.line
 			row.PlanningPending = control.Mode == "active" && row.PlanningCommander != "" && v.responsible == row.PlanningCommander && !v.live
 			if v.run > 0 && row.Status != "closed" {
 				row.State = beads.StateReview
@@ -204,17 +209,17 @@ func planningQuestionLine(ws SnapWorkstream) (line, bool) {
 		}
 	}
 	if ws.QuestionWaiting {
-		return line{kind: "waiting", text: "Waiting for the responsible Commander's decision"}, true
+		return line{kind: "waiting", text: "The agent waits on an answer to its question"}, true
 	}
 	for s := range stepValues(ws.Steps) {
 		if s.QuestionWaiting && !stepClosed(s) && !s.Superseded {
-			return line{kind: "waiting", text: "Waiting for the responsible Commander's decision"}, true
+			return line{kind: "waiting", text: "The agent waits on an answer to its question"}, true
 		}
 	}
 	return line{}, false
 }
 
-const canonicalResultReviewText = "Result ready for Commander review"
+const canonicalResultReviewText = "Finished; closing it"
 
 func recordedResultLine(ws SnapWorkstream) (line, bool) {
 	if ws.Status == "closed" || ws.Status == beads.StatusDeferred || ws.Hold {

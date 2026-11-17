@@ -16,7 +16,7 @@
    "manager_role": "manager-app-w1",
    "starred": false,
    "kind": "waiting",
-   "text": "Result ready for Manager review",
+   "text": "Finished; closing it",
    "since": 1793213980,
    "progress": {
     "done": 0,
@@ -66,7 +66,7 @@
    "manager_role": "manager-app-w3",
    "starred": false,
    "kind": "stalled",
-   "text": "Agent stopped on trace the slow query: the Manager's move",
+   "text": "Agent stopped on trace the slow query",
    "since": 0,
    "progress": {
     "done": 0,
@@ -81,7 +81,7 @@
    "unread": 0,
    "gate": null,
    "tracks": [],
-   "why": "Agent is no longer running and has not reported · Automation failure: Agent stopped on trace the slow query: the Manager's move. Owner: manager-app-w3. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w3.1. Commander owns escalation if recovery fails."
+   "why": "Agent is no longer running and has not reported · Automation failure: Agent stopped on trace the slow query. Owner: manager-app-w3. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w3.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "app:app-w4",
@@ -92,7 +92,7 @@
    "manager_role": "manager-app-w4",
    "starred": false,
    "kind": "stalled",
-   "text": "Manager review overdue",
+   "text": "Finished but not closed",
    "since": 1793210300,
    "progress": {
     "done": 0,
@@ -107,7 +107,7 @@
    "unread": 0,
    "gate": null,
    "tracks": [],
-   "why": "Automation failure: Manager review overdue. Owner: manager-app-w4. Next: review the existing report and close or return the existing task on app-w4.1. Commander owns escalation if recovery fails."
+   "why": "Automation failure: Finished but not closed. Owner: manager-app-w4. Next: review the existing report and close or return the existing task on app-w4.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "app:app-w5",
@@ -118,7 +118,7 @@
    "manager_role": "manager-app-w5",
    "starred": false,
    "kind": "waiting",
-   "text": "Result ready for Manager review",
+   "text": "Finished; closing it",
    "since": 1793213980,
    "progress": {
     "done": 0,
@@ -143,7 +143,7 @@
    "manager_role": "manager-app-w6",
    "starred": false,
    "kind": "waiting",
-   "text": "Result ready for Manager review",
+   "text": "Finished; closing it",
    "since": 1793213980,
    "progress": {
     "done": 0,
@@ -168,7 +168,7 @@
    "manager_role": "manager-app-w7",
    "starred": false,
    "kind": "stalled",
-   "text": "Agent stopped on split the worker: the Manager's move",
+   "text": "Agent stopped on split the worker",
    "since": 0,
    "progress": {
     "done": 0,
@@ -183,7 +183,7 @@
    "unread": 0,
    "gate": null,
    "tracks": [],
-   "why": "Agent is no longer running and has not reported · Automation failure: Agent stopped on split the worker: the Manager's move. Owner: manager-app-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w7.1. Commander owns escalation if recovery fails."
+   "why": "Agent is no longer running and has not reported · Automation failure: Agent stopped on split the worker. Owner: manager-app-w7. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on app-w7.1. Commander owns escalation if recovery fails."
   },
   {
    "key": "app:app-w.8",
@@ -194,7 +194,7 @@
    "manager_role": "manager-app-w.8",
    "starred": false,
    "kind": "waiting",
-   "text": "Result ready for Manager review",
+   "text": "Finished; closing it",
    "since": 1793213980,
    "progress": {
     "done": 0,

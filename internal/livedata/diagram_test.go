@@ -78,10 +78,10 @@ func TestDiagram_Lanes(t *testing.T) {
 		{bex, "lab-bex.2", "automatic|CI, runs on each push to the PR"}, // the track reads as its CI wait
 		{bex, "lab-bex.3", "you|"},                                      // the track's ready decision outranks the Operator at work
 		{bex, "lab-bex.4", "|"},                                         // nothing holds it: nobody's line
-		{bex, "lab-bex.5", "manager|"},                                  // only the Manager approves
+		{bex, "lab-bex.5", "operators|manager"},                         // only the Manager approves
 		{bex, "lab-bex.6", "automatic|parked until Tue 11:20 AM, then the Manager picks it up"}, // parked until a time
 		{bex, "lab-bex.8", "operators|"}, // a bad lane label is ignored: planned work
-		{bex, "lab-bex.9", "manager|"},   // Manager to close
+		{bex, "lab-bex.9", "operators|"}, // Manager to close
 		{nightly, "lab-bex.2.2", "automatic|CI, runs on each push to the PR"},
 		{nightly, "lab-bex.2.3", "reviewers|reviewer-a, reviewer-b"},
 		{nightly, "lab-bex.2.4", "you|"},
@@ -89,11 +89,11 @@ func TestDiagram_Lanes(t *testing.T) {
 		{finance, "lab-bex.3.1", "operators|"},
 		{finance, "lab-bex.3.2", "reviewers|finance team"}, // the lane label, where nothing else says
 		{finance, "lab-bex.3.4", "you|"},
-		{ops, "lab-ops.1", "manager|"}, // the Operator died: the Manager's move
+		{ops, "lab-ops.1", "operators|"}, // the Operator died: its step stays the agents'
 		{ops, "lab-ops.2", "reviewers|oncall-team"},
 		{ops, "lab-ops.3", "you|"},
-		{ops, "lab-ops.4", "manager|"},
-		{ops, "lab-ops.5", "automatic|a timer, then the Manager confirms"},
+		{ops, "lab-ops.4", "operators|"},
+		{ops, "lab-ops.5", "automatic|a timer"},
 	} {
 		s := diagramStep(c.d, c.id)
 		if s == nil || s.Actor+"|"+s.Who != c.want || s.Lane != laneOfActor(s.Actor) {

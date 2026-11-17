@@ -438,7 +438,7 @@ type hand struct{ actor, who string }
 // by the board's order (red, yellow, green), the first in plan order on a tie.
 func (f flow) hand(s SnapStep, text string) hand {
 	if _, ok := resultHandoff([]SnapStep{s}, f.b.now); ok {
-		return hand{ActorManager, ""}
+		return hand{ActorOperators, ""}
 	}
 	if stepClosed(s) || parked(s) || !f.container(s) {
 		return f.leafHand(s)
@@ -501,17 +501,14 @@ func (f flow) leafHand(s SnapStep) hand {
 	}
 	switch s.OwnerState {
 	case "died", "finished":
-		return hand{ActorManager, ""}
+		return hand{ActorOperators, ""}
 	}
 	if (strings.HasPrefix(s.Owner, "operator-") && stepAlive(s)) || liveTask(s) {
 		return hand{ActorOperators, ""}
 	}
-	if f.ws.NowStep == s.BeadID && agentBusy(f.manager, f.hasManager) {
-		return hand{ActorManager, ""}
-	}
 	if r := s.ReviewFact; r != nil {
 		if r.Acted || r.NoPR {
-			return hand{ActorManager, ""}
+			return hand{ActorOperators, ""}
 		}
 		return hand{ActorReviewers, r.Text}
 	}
@@ -547,7 +544,7 @@ func (f flow) leafHand(s SnapStep) hand {
 		return hand{}
 	}
 	if s.State == "in-progress" {
-		return hand{ActorManager, ""}
+		return hand{ActorOperators, ""}
 	}
 	return restingHand(s)
 }
@@ -570,7 +567,7 @@ func restingHand(s SnapStep) hand {
 			case beads.LaneYou:
 				return hand{ActorYou, ""}
 			case beads.LaneCommander:
-				return hand{ActorManager, ""}
+				return hand{ActorOperators, "a review agent"}
 			case beads.LaneAgents:
 				return hand{ActorOperators, ""}
 			}
@@ -580,8 +577,6 @@ func restingHand(s SnapStep) hand {
 	switch {
 	case s.Owner == "user":
 		return hand{ActorYou, ""}
-	case strings.HasPrefix(s.Owner, "manager-"), isCommanderName(s.Owner):
-		return hand{ActorManager, ""}
 	}
 	return hand{ActorOperators, ""}
 }
@@ -602,11 +597,11 @@ func approverHand(approvers []string) hand {
 	}
 	switch {
 	case len(kinds) == 1 && kinds[ActorAutomatic]:
-		return hand{ActorAutomatic, "an automatic check, the Manager confirms"}
+		return hand{ActorAutomatic, "an automatic check"}
 	case len(kinds) == 1 && kinds[ActorOperators]:
 		return hand{ActorOperators, approverNames(approvers)}
 	case !kinds[ActorReviewers]:
-		return hand{ActorManager, ""}
+		return hand{ActorOperators, "a review agent"}
 	}
 	return hand{ActorReviewers, approverNames(approvers)}
 }
@@ -615,8 +610,8 @@ func approverKind(a string) string {
 	a = strings.ToLower(a)
 	switch {
 	case strings.HasPrefix(a, "manager"), isCommanderName(a):
-		// The Commander's own check is its column, never Reviewers (people).
-		return ActorManager
+		// A Commander check is run by a review agent, never by people.
+		return ActorOperators
 	case strings.HasPrefix(a, "operator"), a == "agent", a == "agents":
 		return ActorOperators
 	case a == "automatic", a == "auto", a == "ci":
@@ -639,7 +634,7 @@ func waitHand(w string) hand {
 	case strings.HasPrefix(w, "operator-"):
 		return hand{ActorOperators, ""}
 	case strings.HasPrefix(w, "manager-"), w == beads.ManagerCloseWait, w == beads.ManagerStartWait, w == beads.ManagerDispatchWait:
-		return hand{ActorManager, ""}
+		return hand{ActorOperators, ""}
 	case strings.HasPrefix(w, "review ("):
 		return hand{ActorReviewers, strings.TrimSuffix(strings.TrimPrefix(w, "review ("), ")")}
 	case strings.HasPrefix(w, "main CI"):
@@ -649,7 +644,7 @@ func waitHand(w string) hand {
 	case strings.HasPrefix(w, "prod tag"):
 		return hand{ActorAutomatic, "the release tags prod"}
 	}
-	return hand{ActorAutomatic, "a timer, then the Manager confirms"}
+	return hand{ActorAutomatic, "a timer"}
 }
 
 // commanderOwn: the step is the Commander's own (its owner, its lane, or a

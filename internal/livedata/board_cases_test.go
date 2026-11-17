@@ -201,15 +201,15 @@ func TestBoardReviewFacts(t *testing.T) {
 		s.State, s.ReviewFact = "blocked", &f
 		return []SnapStep{s}
 	}
-	expectLine(t, boardOne(fact(ReviewFact{Acted: true, Text: "a-reviewer approved #4109"}), &idle), "stalled", "a-reviewer approved #4109: the Manager's move")
+	expectLine(t, boardOne(fact(ReviewFact{Acted: true, Text: "a-reviewer approved #4109"}), &idle), "stalled", "a-reviewer approved #4109; next step starting")
 	expectLine(t, boardOne(fact(ReviewFact{Text: "waiting on a-reviewer (#4101)"}), &idle), "waiting", "Waiting for review: waiting on a-reviewer (#4101)")
 	expectLine(t, boardOne(fact(ReviewFact{NoPR: true, Text: "review wait names no PR"}), &idle), "stalled", "Waiting for a review of no PR: nothing can clear it")
-	expectLine(t, boardOne([]SnapStep{st("p-1.1", title("Run the audit"), inProgress, ownedBy("operator-x", "died"))}, &idle), "stalled", "Agent stopped on run the audit: the Manager's move")
+	expectLine(t, boardOne([]SnapStep{st("p-1.1", title("Run the audit"), inProgress, ownedBy("operator-x", "died"))}, &idle), "stalled", "Agent stopped on run the audit")
 	// The wait on the track, the sign-off step open under it: the approval still reads.
 	track := st("p-1", title("Preview display names"), inProgress)
 	track.ReviewFact = &ReviewFact{Acted: true, Text: "a-reviewer approved #4091"}
 	track.Children = []SnapStep{st("p-1.7", title("Signed off by the reviewer"), inProgress)}
-	expectLine(t, boardOne([]SnapStep{track}, &idle), "stalled", "a-reviewer approved #4091: the Manager's move")
+	expectLine(t, boardOne([]SnapStep{track}, &idle), "stalled", "a-reviewer approved #4091; next step starting")
 }
 
 func TestBoardPickingUp(t *testing.T) {

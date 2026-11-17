@@ -123,7 +123,7 @@ func (f flow) reviewBlock(s SnapStep) *ReviewBlock {
 		case rb.Invalid:
 			c.Stale = true
 			rb.Stale++
-			c.Kind, c.Text = "stalled", "Invalid template snapshot: ask the Manager to plug the block again"
+			c.Kind, c.Text = "stalled", "Invalid state: the review block's template snapshot is unreadable; plug the block again"
 		case closed && !current:
 			c.Stale = true
 			rb.Stale++
@@ -201,13 +201,13 @@ func reviewLine(rb *ReviewBlock, closed bool, l line) line {
 		return l
 	}
 	if rb.Invalid {
-		return line{kind: "stalled", text: "Invalid template snapshot: ask the Manager to plug the block again"}
+		return line{kind: "stalled", text: "Invalid state: the review block's template snapshot is unreadable; plug the block again"}
 	}
 	if rb.Stale > 0 {
-		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Stale) + " checks not recorded, the Manager's move"}
+		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Stale) + " checks not recorded"}
 	}
 	if rb.Done+rb.Settled < rb.Total {
-		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Total-rb.Done-rb.Settled) + " checks missing, the Manager's move"}
+		return line{kind: "stalled", text: "Closed with " + strconv.Itoa(rb.Total-rb.Done-rb.Settled) + " checks missing"}
 	}
 	if rb.Settled > 0 {
 		return line{kind: "done", text: "Settled: PR merged, review not completed"}

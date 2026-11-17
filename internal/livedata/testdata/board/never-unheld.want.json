@@ -16,7 +16,7 @@
    "manager_role": "manager-p-c",
    "starred": false,
    "kind": "waiting",
-   "text": "Manager to start the next step",
+   "text": "Starting the next step",
    "since": 1793350680,
    "progress": {
     "done": 1,
@@ -80,7 +80,7 @@
      "letter": ".2",
      "title": "Export area",
      "kind": "idle",
-     "text": "Not started: Manager to plan",
+     "text": "Not started: nothing planned yet",
      "since": 0,
      "progress": {
       "done": 0,
@@ -103,7 +103,7 @@
    "manager_role": "manager-p-a",
    "starred": false,
    "kind": "idle",
-   "text": "Not started: Manager to plan",
+   "text": "Not started: nothing planned yet",
    "since": 0,
    "progress": {
     "done": 0,
@@ -128,7 +128,7 @@
    "manager_role": "manager-p-d",
    "starred": false,
    "kind": "stalled",
-   "text": "Next step not started; Manager recovery needed",
+   "text": "Next step not started",
    "since": 1793350680,
    "progress": {
     "done": 1,
@@ -143,7 +143,7 @@
    "unread": 0,
    "gate": null,
    "tracks": [],
-   "why": "Automation failure: Next step not started; Manager recovery needed. Owner: manager-p-d. Next: dispatch the existing ready work through the guarded dispatch door on p-d.2. Commander owns escalation if recovery fails."
+   "why": "Automation failure: Next step not started. Owner: manager-p-d. Next: dispatch the existing ready work through the guarded dispatch door on p-d.2. Commander owns escalation if recovery fails."
   },
   {
    "key": "p:p-e",
@@ -154,7 +154,7 @@
    "manager_role": "manager-p-e",
    "starred": false,
    "kind": "waiting",
-   "text": "Manager to start the next step",
+   "text": "Starting the next step",
    "since": 1793350680,
    "progress": {
     "done": 0,

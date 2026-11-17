@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -24,7 +25,9 @@ func (b board) actorRow(ws SnapWorkstream) nextactor.Row {
 		return row
 	}
 	ctx := b.actorContext(ws.Project, ws.ProjectID, ws.PlanningCommander)
-	root := nextactor.Decide(b.actorBead(ws.Project, ws.ProjectID, ws.PlanningCommander, rootStep(ws)), ctx)
+	rootBead := b.actorBead(ws.Project, ws.ProjectID, ws.PlanningCommander, rootStep(ws))
+	rootBead.Container = true // a workstream holds steps; no agent runs it
+	root := nextactor.Decide(rootBead, ctx)
 	results := []nextactor.Result{root}
 	if root.Actor != nextactor.None || root.Reason == "children" {
 		var walk func([]SnapStep)
@@ -157,7 +160,9 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	}
 	n.MergeWait = b.s.MergeHeld[project+"\x00"+s.BeadID]
 	n.CardsKnown = true
-	n.CheckStep = b.commanderCheckAfter(project, s.BeadID)
+	n.Lane, n.Container, n.NoBrief = s.Lane, s.Track || len(s.Children) > 0, s.NoBrief
+	n.ReviewStep = IsReviewStep(s)
+	n.ResultLine, n.ResultClean = s.ResultLine, CleanReport(s.ResultLine)
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
 	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
@@ -265,4 +270,21 @@ func (b board) commanderCheckAfter(project, id string) string {
 		}
 	}
 	return best
+}
+
+var reviewTitle = regexp.MustCompile(`(?i)^\s*(review\b|independent review|review agent|commander checks?\b|my check\b)`)
+
+// IsReviewStep: an independent review step, run by a review agent (the old
+// "Commander checks ..." steps included).
+func IsReviewStep(s SnapStep) bool {
+	return !s.Gate && (s.Lane == "commander" || reviewTitle.MatchString(s.Title))
+}
+
+var blockedReport = regexp.MustCompile(`(?i)^\s*final report\W*(blocked|blocker|failed|fail\b|cannot|could not|unable|not done|incomplete)`)
+
+// CleanReport: a result line that is a final report and does not say the
+// work is blocked or failed. A clean final report closes its step.
+func CleanReport(line string) bool {
+	l := strings.ToLower(strings.TrimSpace(line))
+	return strings.HasPrefix(l, "final report") && !blockedReport.MatchString(line)
 }

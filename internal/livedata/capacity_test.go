@@ -79,7 +79,7 @@ func TestNestedCapacityOwnerActivity(t *testing.T) {
 					s.Agents["manager-w"] = SnapAgent{State: root}
 				}
 				row := Board(s, caseNow).Workstreams[0]
-				want := "Not started: Manager to plan"
+				want := "Not started: nothing planned yet"
 				if nested == "stuck" {
 					want = "Stuck"
 				}

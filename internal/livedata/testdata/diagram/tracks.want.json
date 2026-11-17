@@ -48,10 +48,10 @@
     "id": "lab-bex.9",
     "title": "Export docs updated",
     "kind": "waiting",
-    "text": "Result ready for Manager review",
+    "text": "Finished; closing it",
     "since": 1792999000,
     "lane": "agents",
-    "actor": "manager"
+    "actor": "operators"
    },
    {
     "id": "lab-bex.2",
@@ -99,7 +99,8 @@
     "kind": "idle",
     "text": "Not reached",
     "lane": "agents",
-    "actor": "manager",
+    "actor": "operators",
+    "who": "manager",
     "gate": true,
     "approvers": "manager",
     "criteria": "Both tracks are done.",
@@ -283,13 +284,13 @@
   "current": "lab-ops.3",
   "steps": [
    {
-    "why": "Automation failure: Agent stopped: the Manager's move. Owner: manager-lab-ops. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on lab-ops.1. Commander owns escalation if recovery fails.",
+    "why": "Automation failure: Agent stopped. Owner: manager-lab-ops. Next: inspect the stopped run and current holder, then resume or replan through guarded dispatch on lab-ops.1. Commander owns escalation if recovery fails.",
     "id": "lab-ops.1",
     "title": "Alert router rewritten",
     "kind": "stalled",
-    "text": "Agent stopped: the Manager's move",
+    "text": "Agent stopped",
     "lane": "agents",
-    "actor": "manager"
+    "actor": "operators"
    },
    {
     "id": "lab-ops.2",
@@ -318,7 +319,7 @@
     "text": "Manager working",
     "since": 1792999000,
     "lane": "agents",
-    "actor": "manager"
+    "actor": "operators"
    },
    {
     "id": "lab-ops.5",
@@ -328,7 +329,7 @@
     "since": 1792990000,
     "lane": "elsewhere",
     "actor": "automatic",
-    "who": "a timer, then the Manager confirms"
+    "who": "a timer"
    },
    {
     "id": "lab-ops.7",

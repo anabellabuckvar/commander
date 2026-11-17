@@ -74,7 +74,7 @@
       "kind": "done",
       "text": "Done",
       "lane": "agents",
-      "actor": "manager",
+      "actor": "operators",
       "after": [
        "lab-qm.1.3"
       ]
@@ -96,7 +96,7 @@
       "kind": "done",
       "text": "Done",
       "lane": "agents",
-      "actor": "manager",
+      "actor": "operators",
       "after": [
        "lab-qm.1.5"
       ]

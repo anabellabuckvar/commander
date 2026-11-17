@@ -40,7 +40,7 @@ func TestBoardExecutionQueueIsTruthfulWithoutWorkingAgents(t *testing.T) {
 	s.Workstreams[0].Steps[0].ExecutionReady = false
 	s.Workstreams[0].Steps[0].QuestionWaiting = true
 	row = Board(s, time.Now().Unix()).Workstreams[0]
-	if row.Kind != "waiting" || row.Working != 0 || row.Text != "Waiting for the responsible Commander's decision" {
+	if row.Kind != "waiting" || row.Working != 0 || row.Text != "The agent waits on an answer to its question" {
 		t.Fatalf("internal question misreported: %+v", row)
 	}
 	if violations := SnapshotViolations(s); len(violations) != 0 {
@@ -90,7 +90,7 @@ func TestBoardCanonicalResultWaitHasNoFalseSpinnerOrOverdueState(t *testing.T) {
 	}
 	snapshot.Workstreams[0].HumanAnswerPending = false
 	snapshot.Workstreams[0].QuestionWaiting = true
-	if row := Board(snapshot, 86400).Workstreams[0]; row.Text != "Waiting for the responsible Commander's decision" {
+	if row := Board(snapshot, 86400).Workstreams[0]; row.Text != "The agent waits on an answer to its question" {
 		t.Fatalf("terminal report concealed a planning checkpoint: %+v", row)
 	}
 	snapshot.Workstreams[0].QuestionWaiting = false

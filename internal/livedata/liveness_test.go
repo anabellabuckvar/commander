@@ -41,8 +41,8 @@ func TestBoardLivenessIsTheFact(t *testing.T) {
 		row        int
 		with, word string
 	}{
-		{0, "Agent stopped on build wave 2 of the job moves: the Manager's move", "Working on build wave 2 of the job moves"},
-		{5, "Agent stopped on switch dev to the new database at a quiet window: the Manager's move", "Waiting for an Operator"},
+		{0, "Agent stopped on build wave 2 of the job moves", "Working on build wave 2 of the job moves"},
+		{5, "Agent stopped on switch dev to the new database at a quiet window", "Waiting for an Operator"},
 	} {
 		if got := with.Workstreams[c.row].Text; got != c.with {
 			t.Errorf("row %d with liveness: %q, want %q", c.row+1, got, c.with)

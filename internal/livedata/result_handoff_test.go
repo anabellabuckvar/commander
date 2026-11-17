@@ -13,7 +13,7 @@ func TestResultHandoffUsesManagerLaneAndNeverInventsLiveOperator(t *testing.T) {
 	if row.Working != 0 {
 		t.Fatalf("result receipt fabricated a live Operator: %+v", row)
 	}
-	if row.Text != resultReviewText || d.Text != resultReviewText || d.Actor != ActorManager || d.Kind != "waiting" {
+	if row.Text != resultReviewText || d.Text != resultReviewText || d.Actor != ActorOperators || d.Kind != "waiting" {
 		t.Fatalf("handoff disagrees: row=%q diagram=%+v", row.Text, d)
 	}
 	if row.Workflow.Steps[0].Text != d.Text {
@@ -35,7 +35,7 @@ func TestResultHandoffDoesNotOutrankResumedOperator(t *testing.T) {
 func TestResultHandoffBecomesOverdueWithoutBecomingUserDecision(t *testing.T) {
 	s := SnapStep{Status: "in_progress", State: "review", Waiting: "Manager to close", WaitSince: 10, WaitUntil: 20, WaitUntilAs: "Manager to close"}
 	l, ok := resultHandoff([]SnapStep{s}, 21)
-	if !ok || l.kind != "stalled" || l.text != "Manager review overdue" || l.since != 10 {
+	if !ok || l.kind != "stalled" || l.text != "Finished but not closed" || l.since != 10 {
 		t.Fatal(l, ok)
 	}
 	s.Status = "closed"
@@ -74,7 +74,7 @@ func TestStartReceiptReadsTheManagersMoveNeverStateMissing(t *testing.T) {
 			r := Board(s, caseNow).Workstreams[0]
 			expectLine(t, r, tc.kind, tc.text)
 			for _, d := range r.Diagram.Steps {
-				if d.ID == "b" && d.Actor != ActorManager {
+				if d.ID == "b" && d.Actor != ActorOperators {
 					t.Fatalf("diagram hand %+v", d)
 				}
 			}

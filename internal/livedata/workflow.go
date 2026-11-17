@@ -191,7 +191,7 @@ func (f flow) leafBaseLine(s SnapStep) line {
 		return line{kind: "waiting", text: "Commander to review the proposed " + p.Proposed, since: p.ProposedAt}
 	} else if ok {
 		if p.AskedAt > 0 && f.b.now-p.AskedAt >= pitchDeadline {
-			return line{kind: "stalled", text: "Pitch still not written: the Manager's move", since: p.AskedAt}
+			return line{kind: "stalled", text: "Invalid state: no card written yet", since: p.AskedAt}
 		}
 		return line{kind: "waiting", text: "Manager writing the pitch", since: p.AskedAt}
 	}
@@ -210,9 +210,9 @@ func (f flow) leafBaseLine(s SnapStep) line {
 	}
 	switch s.OwnerState {
 	case "died":
-		return line{kind: "stalled", text: "Agent stopped: the Manager's move", since: s.OwnerSince, why: s.OwnerWhy}
+		return line{kind: "stalled", text: "Agent stopped", since: s.OwnerSince, why: s.OwnerWhy}
 	case "finished":
-		return line{kind: "stalled", text: "Agent finished, step not closed: the Manager's move", since: s.OwnerSince, why: s.OwnerWhy}
+		return line{kind: "stalled", text: "Agent finished; closing it", since: s.OwnerSince, why: s.OwnerWhy}
 	}
 	if (strings.HasPrefix(s.Owner, "operator-") && stepAlive(s)) || liveTask(s) {
 		if s.PlaceText != "" {
@@ -226,7 +226,7 @@ func (f flow) leafBaseLine(s SnapStep) line {
 	if r := s.ReviewFact; r != nil {
 		switch {
 		case r.Acted:
-			return line{kind: "stalled", text: r.Text + ": the Manager's move"}
+			return line{kind: "stalled", text: r.Text + "; next step starting"}
 		case r.NoPR:
 			return line{kind: "stalled", text: "Waiting for a review of no PR: nothing can clear it"}
 		}

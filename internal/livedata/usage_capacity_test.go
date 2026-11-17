@@ -32,35 +32,24 @@ func TestUsageCapacityAppearsOnEveryAffectedRow(t *testing.T) {
 	}
 	w.Hold = false
 	w.QuestionWaiting = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "answer an agent") {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "waits on an answer to its question") {
 		t.Fatal(l)
 	}
 	w.QuestionWaiting = false
 	w.ExecutionError = ""
 	w.ExecutionReady = false
 	w.PlanningPending = true
-	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); l.text != "Commander to plan the next step" {
+	if l := (board{s: s, now: 1}).activeWorkstreamLine(w, 0); strings.Contains(l.text, "usage exhausted") {
 		t.Fatal("unaffected work got exhaustion", l)
 	}
 }
 
 func TestPinnedPlannerUsageAppearsOnEveryDependentRow(t *testing.T) {
+	// The Commander is not on any step's path: its usage limit never holds work.
 	s := activeBoardFixture()
 	s.PlanningUsage = map[string]string{"commander-focused": "Claude usage exhausted; planning runtime is explicitly pinned to Claude"}
-	for _, w := range []SnapWorkstream{s.Workstreams[0], {BeadID: "other", Status: "open", PlanningCommander: "commander-focused", PlanningPending: true}} {
-		if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); !strings.Contains(l.text, "usage exhausted") || l.since != 0 || l.kind != "stuck" {
-			t.Fatal(l)
-		}
-	}
-	w := s.Workstreams[0]
-	w.PlanningPending = false
-	w.Steps = nil
-	w.ExecutionMode = "active"
-	w.ExecutionReady = true
-	w.ExecutionEligible = true
-	w.ExecutionCapable = true
-	if l := (board{s: s, now: 86400}).activeWorkstreamLine(w, 0); l.text != "Queued for the next free agent" {
-		t.Fatal("planner usage blocked independently authorized work", l)
+	if l := (board{s: s, now: 86400}).activeWorkstreamLine(s.Workstreams[0], 0); strings.Contains(l.text, "usage exhausted") {
+		t.Fatal("the Commander's usage limit held an agent step", l)
 	}
 }
 

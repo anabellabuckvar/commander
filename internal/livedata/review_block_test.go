@@ -349,7 +349,7 @@ func TestReviewBlock_SettledAndInvalidDispositionMatrix(t *testing.T) {
 			if tc.wantDone < 6 && w.Kind == "done" {
 				t.Fatalf("refused block reads Done: %+v", w)
 			}
-			if tc.invalid && tc.state != "MERGED" && !strings.Contains(w.Text, "Invalid template snapshot") {
+			if tc.invalid && tc.state != "MERGED" && !strings.Contains(w.Text, "template snapshot is unreadable") {
 				t.Fatalf("invalid snapshot not actionable: %s", w.Text)
 			}
 			if tc.targetClosed {

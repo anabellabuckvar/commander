@@ -76,6 +76,8 @@ type ObjectiveRow struct {
 	ProgressAt                                          int64  // last recorded progress (unix s)
 	PlanningPending                                     bool
 	ResultRunID, ResultReadyAt                          int64
+	ResultLine                                          string
+	NoBrief                                             bool
 	QuestionWaiting                                     bool
 	HumanAnswerPending                                  bool
 	ExecutionMode                                       string

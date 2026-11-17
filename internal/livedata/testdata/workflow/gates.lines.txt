@@ -24,6 +24,6 @@
 ▶ Rotate the lab keys: Agent working (lab-ops.1)
   Land the cleanup PR: Waiting for review (lab-ops.2)
   Announce the new keys: Not started (lab-ops.3)
-  Old runner cleanup: Agent stopped: the Manager's move (lab-ops.4)
+  Old runner cleanup: Agent stopped (lab-ops.4)
 
 ▶ = now (lab-ops.1)
