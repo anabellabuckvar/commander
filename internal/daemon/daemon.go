@@ -520,6 +520,16 @@ func New() (*Daemon, error) {
 		return srv.DoorRunComment(ctx, run, text)
 	}
 	d.places = place.NewService(placeConfig)
+	if waits != nil {
+		// A resolved wait continues its step without the Commander: the step's own
+		// agent is woken, or auto-dispatch starts it, unless a Manager is running.
+		waits.managerLive = func(role string) bool {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			return managerRunning(live.Snapshot(ctx), role)
+		}
+		waits.slack = newSlackHistory(home)
+	}
 	return d, nil
 }
 

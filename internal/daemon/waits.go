@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -84,6 +85,19 @@ type waitWatcher struct {
 	checkedAt atomic.Int64
 	// facts is each bead's review waits as GitHub had them at the last poll.
 	facts atomic.Pointer[map[string]livedata.ReviewFact]
+	// managerLive reports whether a workstream's Manager is running. When it is
+	// not, a resolved wait wakes the step's own running agent, or nobody (the
+	// dispatch receipt lets auto-dispatch start the step): the Commander is not
+	// in the loop. nil = mail the Manager as before.
+	managerLive func(role string) bool
+	// deployWorkflow matches a prod deploy workflow's name (nil = defaultDeployWorkflow).
+	deployWorkflow *regexp.Regexp
+	// deployRuns is each repo's successful deploy runs for the poll in progress.
+	deployRuns map[string][]deployRun
+	// compared remembers GitHub compare results (sha|head -> status); they never change.
+	compared map[string]string
+	// slack reads a channel's history for event:slack waits; nil = not configured.
+	slack slackHistoryFunc
 }
 
 // CheckedAt is when the waits were last checked; zero before the first poll.
@@ -286,9 +300,22 @@ func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, w
 			return // current custody has moved; never wake the old handoff over it
 		}
 		manager := wsmgr.Role(wsmgr.Owner(ctx, w.beads, p.Path, b.ID))
-		if err := w.mail(ctx, manager, subject, body); err != nil {
-			log.Printf("daemon: waits: mail %s: %v", manager, err)
-			return
+		to := manager
+		if !handoff && w.managerLive != nil && !w.managerLive(manager) {
+			// No Manager: the step's own running agent picks the work back up; with
+			// none, the dispatch receipt below lets auto-dispatch start the step.
+			to = ""
+			if strings.HasPrefix(owner, "operator-") && w.runningNow[spawn.CanonicalRole(owner)] {
+				to = owner
+			}
+		}
+		if to != "" {
+			if err := w.mail(ctx, to, subject, body); err != nil {
+				log.Printf("daemon: waits: mail %s: %v", to, err)
+				return
+			}
+		} else {
+			log.Printf("daemon: waits: %s on %s resolved (%s); no Manager or running agent, auto-dispatch continues the step", label, b.ID, subject)
 		}
 		w.woken[key] = true
 	}
@@ -356,6 +383,7 @@ func storedLabel(labels []string, wt beads.Wait) string {
 }
 
 func (w *waitWatcher) poll(ctx context.Context) {
+	w.deployRuns = nil // read fresh each poll
 	projects, err := w.projects.ListProjects(ctx)
 	if err != nil {
 		log.Printf("daemon: waits: list projects: %v", err)
@@ -396,7 +424,11 @@ func (w *waitWatcher) poll(ctx context.Context) {
 func (w *waitWatcher) checkBead(ctx context.Context, p store.Project, repo string, b beads.Bead, waits []beads.Wait) {
 	for _, wt := range waits {
 		subject, body, fired := w.event(ctx, repo, b, wt)
+		if !fired && wt.IsEventWait() {
+			subject, body, fired = w.eventWaitFired(ctx, repo, b, wt)
+		}
 		if !fired {
+			w.expectOverdue(ctx, b, wt)
 			continue
 		}
 		w.wake(ctx, p, b, wt, subject, body)
