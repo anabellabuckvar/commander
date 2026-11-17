@@ -377,7 +377,7 @@ func TestReportedThroughDaemonWiring(t *testing.T) {
 	if snap.Live == nil || len(snap.Live.Reported) != 1 || snap.Live.Reported[0].Bead != "app-w.1" {
 		t.Fatalf("snapshot's reported: %+v", snap.Live)
 	}
-	if row := reportedRow(t, snap); row.Text != "Result ready for Manager review" {
+	if row := reportedRow(t, snap); row.Text != "Finished; closing it" {
 		t.Fatalf("row reads %q, why %q", row.Text, row.Why)
 	}
 	fresh, ok := d.invariant.fresh(ctx)

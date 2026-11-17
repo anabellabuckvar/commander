@@ -158,6 +158,7 @@ type State struct {
 // Daemon is the long-lived runtime. Construct via New (production) or via
 // the test seam in daemon_test.go (mocked clients + skipSocket=true).
 type Daemon struct {
+	attempted         *answerTries // recorded answers cmdrd tried to apply
 	executionWG       sync.WaitGroup
 	orchestrationMode string // read from canonical database before starting workers
 	store             *store.Store
@@ -330,7 +331,14 @@ func New() (*Daemon, error) {
 			}
 			return chatEngine.CapacityFailures()
 		},
-		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
+		OnSnapshot: func(snap *livedata.Snapshot) {
+			checkPlans(health, snap)
+			checkStuck(health, snap, time.Now())
+			if waits != nil {
+				board := *snap
+				go waits.queueBoardInvalid(context.Background(), &board)
+			}
+		},
 		Deps:        livedata.Deps{Store: boardStore, Beads: reads, Scrape: livedata.ScrapeAgentStates, UsageCapacity: func() string { return chat.UsageCapacityCause(home, time.Now()) }, PlanningUsage: func(role string) string { return chat.PlanningUsageCause(home, role, time.Now()) }},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads
 		WaitsChecked: func() time.Time {
@@ -600,6 +608,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 				go describer.Run(ctx)
 				go d.runClosingSweep(ctx)
 				go d.runAutoDispatch(ctx)
+				go d.runAutoAccept(ctx)
 				go d.runPRLinker(ctx)
 				go d.runLinearSync(ctx)
 			}

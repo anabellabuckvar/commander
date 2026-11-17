@@ -42,9 +42,6 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 	}
 	var out []dispatchJob
 	for _, ws := range snap.Workstreams {
-		if managerRunning(snap, ws.ManagerRole) {
-			continue
-		}
 		byID := map[string]livedata.SnapStep{}
 		var index func([]livedata.SnapStep)
 		index = func(steps []livedata.SnapStep) {
@@ -54,20 +51,18 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 			}
 		}
 		index(ws.Steps)
-		var walk func([]livedata.SnapStep, string)
-		walk = func(steps []livedata.SnapStep, manager string) {
+		var walk func([]livedata.SnapStep)
+		walk = func(steps []livedata.SnapStep) {
 			for _, s := range steps {
-				m := manager
-				if s.ManagerRole != "" {
-					m = s.ManagerRole
-				}
-				if !managerRunning(snap, m) && dispatchable(s, byID) && !running[key{ws.ProjectID, s.BeadID}] && !asked[ws.Project+"\x00"+s.BeadID] {
+				if dispatchable(s, byID) && !running[key{ws.ProjectID, s.BeadID}] && !asked[ws.Project+"\x00"+s.BeadID] {
 					out = append(out, dispatchJob{projectID: ws.ProjectID, project: ws.Project, bead: s.BeadID, title: s.Title})
 				}
-				walk(s.Children, m)
+				walk(s.Children)
 			}
 		}
-		walk(ws.Steps, ws.ManagerRole)
+		if ws.Status != "deferred" && !ws.Hold {
+			walk(ws.Steps)
+		}
 	}
 	return out
 }
@@ -76,19 +71,13 @@ func dispatchable(s livedata.SnapStep, byID map[string]livedata.SnapStep) bool {
 	if s.Status != "open" || s.Superseded || s.Withdrawn || s.Hold || s.Gate || s.ClosingGate || s.Track || s.Task ||
 		s.ExecutionReady || s.ExecutionMode != "active" || s.PlanningPending || s.ResultReadyAt > 0 || s.QuestionWaiting ||
 		s.HumanAnswerPending || s.State == "needs-user" || s.OwnerState == "working" ||
-		(s.Lane != "" && s.Lane != "agents") { // a person's task (lane you or elsewhere) is never an agent's
+		s.NoBrief || (s.Lane != "" && s.Lane != "agents" && s.Lane != "commander") { // a person's task (lane you or elsewhere) is never an agent's
 		return false
 	}
-	receipt := false
 	for _, w := range s.TypedWaits {
-		if beads.IsManagerDispatch(w) {
-			receipt = true
-		} else {
+		if !beads.IsManagerHandoff(w) {
 			return false // another wait holds it
 		}
-	}
-	if !receipt {
-		return false
 	}
 	for _, c := range s.Children {
 		if c.Status != "closed" && c.State != "done" && !c.Superseded {
@@ -128,18 +117,29 @@ func (d *Daemon) runAutoDispatch(ctx context.Context) {
 			return
 		case <-t.C:
 		}
-		snap := d.live.Snapshot(ctx)
-		if snap.Degraded != nil || snap.OrchestrationMode != "active" {
-			continue
-		}
-		for _, j := range autoDispatchJobs(snap) {
-			ok, err := d.store.DispatchApproved(ctx, j.projectID, j.bead, dispatchReceipt)
-			switch {
-			case err != nil:
-				log.Printf("auto-dispatch: %s %s: %v", j.project, j.bead, err)
-			case ok:
-				log.Printf("auto-dispatch: %s %s %q is ready for an agent (no Manager running)", j.project, j.bead, j.title)
-			}
+		d.autoDispatchOnce(ctx)
+	}
+}
+
+// autoDispatchOnce starts an agent on every unblocked agent step.
+func (d *Daemon) autoDispatchOnce(ctx context.Context) {
+	snap := d.live.Snapshot(ctx)
+	if snap.Degraded != nil || snap.OrchestrationMode != "active" {
+		return
+	}
+	for _, j := range autoDispatchJobs(snap) {
+		ok, err := d.store.DispatchReady(ctx, j.projectID, j.bead, dispatchHandoff)
+		switch {
+		case err != nil:
+			log.Printf("auto-dispatch: %s %s: %v", j.project, j.bead, err)
+		case ok:
+			log.Printf("auto-dispatch: %s %s %q is ready for an agent", j.project, j.bead, j.title)
 		}
 	}
+}
+
+// dispatchHandoff: a Manager custody receipt, cleared when cmdrd starts the step.
+func dispatchHandoff(label string) bool {
+	w, ok := beads.ParseWaitLabel(label)
+	return ok && beads.IsManagerHandoff(w)
 }

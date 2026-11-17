@@ -16,6 +16,17 @@ import (
 // (closed, already ready or running, no brief, or no receipt left) and reports
 // false without changing anything.
 func (s *Store) DispatchApproved(ctx context.Context, pid int64, bead string, handoff func(label string) bool) (bool, error) {
+	return s.dispatch(ctx, pid, bead, handoff, true)
+}
+
+// DispatchReady starts an unblocked agent step with no receipt needed: the
+// system starts an agent for every unblocked step that has a brief. A
+// Manager dispatch receipt on it is removed the same way.
+func (s *Store) DispatchReady(ctx context.Context, pid int64, bead string, handoff func(label string) bool) (bool, error) {
+	return s.dispatch(ctx, pid, bead, handoff, false)
+}
+
+func (s *Store) dispatch(ctx context.Context, pid int64, bead string, handoff func(label string) bool, needReceipt bool) (bool, error) {
 	if !s.postgres {
 		return false, errors.New("dispatch requires PostgreSQL")
 	}
@@ -34,7 +45,7 @@ func (s *Store) DispatchApproved(ctx context.Context, pid int64, bead string, ha
 			return e
 		}
 		receipts := slices.DeleteFunc(slices.Clone(labels), func(l string) bool { return !handoff(l) })
-		if status != "open" || ready || active || len(receipts) == 0 || strings.TrimSpace(description) == "" || strings.TrimSpace(acceptance) == "" {
+		if status != "open" || ready || active || (needReceipt && len(receipts) == 0) || strings.TrimSpace(description) == "" || strings.TrimSpace(acceptance) == "" {
 			return nil
 		}
 		kept, e := json.Marshal(slices.DeleteFunc(labels, handoff))

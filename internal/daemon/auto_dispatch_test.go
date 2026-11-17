@@ -47,8 +47,10 @@ func TestAutoDispatchPicksApprovedWorkNoManagerWillStart(t *testing.T) {
 	if len(got) != 2 || !got["vibe-apps-zq9h.6.63.14"] || !got["vibe-apps-zq9h.6.66.24"] {
 		t.Fatalf("dispatch jobs = %v, want only the two approved, unblocked, unclaimed steps", got)
 	}
+	// The system starts an agent on every unblocked step: a running Manager
+	// (a Commander) is never on the critical path.
 	snap.Agents["manager-vibe-apps-zq9h.6"] = livedata.SnapAgent{State: store.AgentIdle}
-	if jobs := autoDispatchJobs(snap); len(jobs) != 0 {
-		t.Fatalf("with its Manager running cmdrd dispatched %v; that is the Manager's", jobs)
+	if jobs := autoDispatchJobs(snap); len(jobs) != 2 {
+		t.Fatalf("with its Manager running cmdrd dispatched %v, want the same two steps", jobs)
 	}
 }

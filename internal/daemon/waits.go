@@ -87,7 +87,10 @@ type waitWatcher struct {
 	facts atomic.Pointer[map[string]livedata.ReviewFact]
 	// shapeReport and invalid: the continuous state audit (nil report: off).
 	shapeReport shapeReportFunc
-	invalid     atomic.Pointer[[]livedata.InvalidState]
+	// qmu guards queued: invalid-state items already in the Commander's queue.
+	qmu     sync.Mutex
+	queued  map[string]bool
+	invalid atomic.Pointer[[]livedata.InvalidState]
 	// managerLive reports whether a workstream's Manager is running. When it is
 	// not, a resolved wait wakes the step's own running agent, or nobody (the
 	// dispatch receipt lets auto-dispatch start the step): the Commander is not

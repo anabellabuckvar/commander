@@ -36,20 +36,13 @@ func (w *waitWatcher) auditState(ctx context.Context, projects []store.Project) 
 			continue
 		}
 		for _, v := range vs {
-			if v.Rule == "parked-without-reason" {
-				continue // advisory: never a red row
+			if v.Rule == "parked-without-reason" || v.Rule == "no-owner-tag" {
+				// advisory on old steps: a new step without an owner tag is refused at
+				// write time; old ones show their owner from the run they had.
+				continue
 			}
 			all = append(all, livedata.InvalidState{Project: p.Name, Rule: v.Rule, Beads: v.Beads, Why: v.Why, Fix: v.Fix})
-			key := "invalid|" + p.Name + "|" + v.Key()
-			if w.woken[key] {
-				continue
-			}
-			subject := fmt.Sprintf("[invalid state] %s: %s", v.Rule, strings.Join(v.Beads, ", "))
-			body := fmt.Sprintf("Project %s: %s\nFix: %s\nThe board shows it as a red \"invalid state: %s\" finding until it is fixed.", p.Name, v.Why, v.Fix, v.Rule)
-			if err := w.mail(ctx, "commander", subject, body); err != nil {
-				continue
-			}
-			w.woken[key] = true
+			w.queueInvalid(ctx, p.Name, v.Rule, v.Beads, v.Why, v.Fix)
 		}
 	}
 	w.invalid.Store(&all)
@@ -61,4 +54,48 @@ func (w *waitWatcher) InvalidState() []livedata.InvalidState {
 		return *p
 	}
 	return nil
+}
+
+// queueInvalid puts one invalid-structure item in the Commander's queue, once
+// per project, rule and bead: fixing bead structure is the Commander's job.
+func (w *waitWatcher) queueInvalid(ctx context.Context, project, rule string, ids []string, why, fix string) {
+	if len(ids) == 0 {
+		return
+	}
+	key := "invalid|" + project + "|" + rule + "|" + ids[0]
+	w.qmu.Lock()
+	if w.queued == nil {
+		w.queued = map[string]bool{}
+	}
+	done := w.queued[key]
+	w.qmu.Unlock()
+	if done {
+		return
+	}
+	subject := fmt.Sprintf("[invalid state] %s: %s", rule, strings.Join(ids, ", "))
+	body := fmt.Sprintf("Project %s: %s\nFix: %s\nThe board shows it as a red \"invalid-state: %s\" finding until it is fixed.", project, why, fix, rule)
+	if err := w.mail(ctx, "commander", subject, body); err != nil {
+		return
+	}
+	w.qmu.Lock()
+	w.queued[key] = true
+	w.qmu.Unlock()
+}
+
+// queueBoardInvalid queues the board's invalid-state findings (a step with no
+// valid owner, a line naming the wrong actor) the same way.
+func (w *waitWatcher) queueBoardInvalid(ctx context.Context, snap *livedata.Snapshot) {
+	if w == nil || snap == nil || snap.Display == nil || w.mail == nil {
+		return
+	}
+	for _, r := range snap.Display.Workstreams {
+		if r.Diagram == nil {
+			continue
+		}
+		for _, f := range r.Diagram.Findings {
+			if rule, ok := strings.CutPrefix(f.Check, livedata.CheckInvalidState); ok {
+				w.queueInvalid(ctx, r.Project, rule, []string{f.Bead}, f.Why, f.Fix)
+			}
+		}
+	}
 }
