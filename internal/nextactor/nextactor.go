@@ -213,6 +213,11 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 	// then it waits on its blocker. The same holds for a finished or stopped
 	// run with an open blocker: the blocker is the follow-up the Commander
 	// planned in answer to that run, so the step waits on it, not on a review.
+	// The same holds for steps under it: a step re-planned into child steps
+	// that have newer work is carried by them, not by its old outcome.
+	if answeredByBlocker(r) && supersededByChildren(b, r, ctx) {
+		return Result{Actor: None, Reason: "children", Text: "Carried by its steps", Bead: b.ID}
+	}
 	if (r.Actor == User || answeredByBlocker(r)) && len(b.BlockedBy) > 0 {
 		if ctx.Lookup == nil {
 			return Result{Actor: None, Reason: "dependency", Text: "Waiting on another step", Bead: b.ID}
@@ -270,6 +275,32 @@ func answeredByBlocker(r Result) bool {
 	switch strings.TrimPrefix(r.Reason, "commander_idle:") {
 	case "review_result", "agent_stopped", "exited_without_report":
 		return true
+	}
+	return false
+}
+
+// supersededByChildren: b's run outcome predates work on its open child steps
+// (an agent on one, or progress or a wait recorded after the outcome), so the
+// outcome was answered by re-planning the step into those children.
+func supersededByChildren(b Bead, r Result, ctx Context) bool {
+	if !b.HasOpenChildren || ctx.Lookup == nil {
+		return false
+	}
+	for _, id := range b.Children {
+		c, ok := ctx.Lookup(id)
+		if !ok || c.Status == "closed" || c.Superseded || c.Withdrawn {
+			continue
+		}
+		if c.Executing || c.Unverified || c.ReadyQueued {
+			return true
+		}
+		newest := max(c.ProgressAt, c.ExecSince)
+		for _, w := range c.Waits {
+			newest = max(newest, unix(w.Since))
+		}
+		if newest > r.Since {
+			return true
+		}
 	}
 	return false
 }
@@ -351,7 +382,9 @@ func own(b Bead, ctx Context) Result {
 			return Result{Actor: Stuck, Reason: "unverified", Who: b.ExecRole, Since: b.UnverifiedSince, Text: "Stuck: claimed, but no agent process is running"}
 		}
 		return Result{Actor: Agent, Reason: "starting", Who: b.ExecRole, Since: b.UnverifiedSince, Text: "Starting an agent on " + quoted(b.Title)}
-	case b.ResultReady:
+	// A step whose agent the Commander stopped holds that agent's save-and-stop
+	// note, not a deliverable: re-planning is owed, never a review.
+	case b.ResultReady && !b.Stopped:
 		return commanderOwed(b, ctx, "review_result", "review the finished result", b.ResultSince)
 	}
 	return waits(b, ctx)

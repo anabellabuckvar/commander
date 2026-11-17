@@ -461,3 +461,48 @@ func TestAHeldMergeCardWaitsOnItsChecks(t *testing.T) {
 		t.Fatalf("held merge = %s %q, want waiting on its checks", r.Actor, r.Text)
 	}
 }
+
+// Release 2b (vibe-apps-zq9h.6.76) on Nov 17: the Commander asked its agent to
+// stop at 03:06, the agent's save-and-stop "Final report: STOPPED" landed as
+// the step's result, cmdrd forced the stop at 03:16, and at 14:31 the step was
+// re-planned into a six-step chain whose step 2 has a running agent. Tracks
+// 4.2 and 4.5, blocked on it, read "commander to review the finished result"
+// for 12 hours; they wait on the chain's live step.
+func TestRePlannedStepIsCarriedByItsNewerChildren(t *testing.T) {
+	result := now.Add(-12 * time.Hour).Unix()
+	build := Bead{ID: "c1", Title: "2b chain 1/6: build the train", Status: "closed"}
+	fixOrDrop := Bead{ID: "c2", Title: "2b chain 2/6: fix or drop the 03:17 validate failures", Status: "open", PlanningCommander: "commander",
+		Executing: true, ExecWorking: true, ExecRole: "operator-y", ExecSince: now.Add(-30 * time.Minute).Unix(), ProgressAt: now.Add(-time.Minute).Unix()}
+	gate := Bead{ID: "c3", Title: "2b chain 3/6 (gate): one full validate", Status: "open", PlanningCommander: "commander", BlockedBy: []string{"c2"}}
+	release := Bead{ID: "rel", Title: "Release 2b", Status: "open", PlanningCommander: "commander",
+		ResultReady: true, ResultSince: result, HasOpenChildren: true, Children: []string{"c2", "c3"}}
+	chart := Bead{ID: "chart", Title: "Chart open", Status: "open", PlanningCommander: "commander", BlockedBy: []string{"rel"}}
+	ctx := ctxWith(true, 0, map[string]Bead{"c1": build, "c2": fixOrDrop, "c3": gate, "rel": release, "chart": chart})
+
+	got := Decide(chart, ctx)
+	if got.Actor != Agent || !strings.Contains(got.Text, "2b chain 2/6") {
+		t.Fatalf("blocked track = %s/%s %q, want it waiting on the chain's working step", got.Actor, got.Reason, got.Text)
+	}
+	if len(got.Via) == 0 || got.Via[0] != "Release 2b" {
+		t.Fatalf("via = %v, want it to name Release 2b", got.Via)
+	}
+
+	// Children with nothing newer than the outcome do not supersede it.
+	stale := fixOrDrop
+	stale.Executing, stale.ExecWorking, stale.ExecSince, stale.ProgressAt = false, false, 0, result-60
+	ctx2 := ctxWith(true, 0, map[string]Bead{"c2": stale, "c3": gate, "rel": release})
+	if r := Decide(release, ctx2); !strings.HasSuffix(r.Reason, "review_result") {
+		t.Fatalf("old children = %s, want the result still owed a review", r.Reason)
+	}
+}
+
+// The same 2b step: a result recorded by the agent the Commander stopped is its
+// save-and-stop note. Re-planning is owed, never "review the finished result".
+func TestCommanderStoppedStepOwesReplanNotReview(t *testing.T) {
+	b := Bead{ID: "rel", Title: "Release 2b", Status: "open", PlanningCommander: "commander",
+		ResultReady: true, ResultSince: now.Add(-time.Hour).Unix(), Stopped: true, ProgressAt: now.Add(-time.Hour).Unix()}
+	got := Decide(b, ctxWith(true, 0, nil))
+	if strings.Contains(got.Reason, "review_result") || !strings.Contains(got.Text, "re-plan") {
+		t.Fatalf("stopped step = %s %q, want re-plan owed, not a review", got.Reason, got.Text)
+	}
+}
