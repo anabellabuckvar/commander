@@ -52,8 +52,15 @@ type Bead struct {
 	NeedsUser          bool   // needs-user state, a user gate or an open decision card
 	UserAsk            string // what the user is asked, when known
 	HumanAnswerPending bool   // the user answered; the planning Commander must apply it
-	PendingQuestions   int    // agent questions waiting for the planning Commander
-	QuestionWaiting    bool   // this bead's agent waits on a blocking answer
+	// CheckStep is the title of the explicit Commander check step that follows
+	// this step (lane commander, blocked on it): a finished result waiting on the
+	// Commander points at that step, never at a hidden review.
+	CheckStep string
+	// CardsKnown: NeedsUser was computed from the user's real NEEDS YOU list, so a
+	// user wait with no listed card is the Commander's move (put the card up), not the user's.
+	CardsKnown       bool
+	PendingQuestions int  // agent questions waiting for the planning Commander
+	QuestionWaiting  bool // this bead's agent waits on a blocking answer
 
 	Waits     []beads.Wait
 	BlockedBy []string // ids of open blocking beads, resolved through Context.Lookup
@@ -385,6 +392,9 @@ func own(b Bead, ctx Context) Result {
 	// A step whose agent the Commander stopped holds that agent's save-and-stop
 	// note, not a deliverable: re-planning is owed, never a review.
 	case b.ResultReady && !b.Stopped:
+		if b.CheckStep != "" {
+			return commanderOwed(b, ctx, "review_result", "check "+quoted(b.CheckStep), b.ResultSince)
+		}
 		return commanderOwed(b, ctx, "review_result", "review the finished result", b.ResultSince)
 	}
 	return waits(b, ctx)
@@ -403,6 +413,10 @@ func waits(b Bead, ctx Context) Result {
 					continue
 				}
 				return recordQuestion(b, ctx)
+			}
+			if b.CardsKnown && !b.NeedsUser {
+				// The row may only say "Needs you" when the card is on the user's list.
+				return commanderOwed(b, ctx, "card_missing", "put "+quoted(b.UserAsk)+" on your list", unix(w.Since))
 			}
 			return Result{Actor: User, Reason: "waiting_user", Since: unix(w.Since), Text: "Needs you: " + b.UserAsk}
 		case beads.IsManagerHandoff(w):

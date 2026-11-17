@@ -1,6 +1,7 @@
 package livedata
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -155,6 +156,8 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 		n.UsageCapacity = s.ExecutionError
 	}
 	n.MergeWait = b.s.MergeHeld[project+"\x00"+s.BeadID]
+	n.CardsKnown = true
+	n.CheckStep = b.commanderCheckAfter(project, s.BeadID)
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
 	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
@@ -244,4 +247,22 @@ func rootStep(ws SnapWorkstream) SnapStep {
 		ExecutionAttempts: ws.ExecutionAttempts, ExecutionError: ws.ExecutionError, PlanningPending: ws.PlanningPending,
 		PlanningCommander: ws.PlanningCommander, Children: ws.Steps,
 	}
+}
+
+// commanderCheckAfter is the title of the open Commander check step that waits
+// on id (lane commander, a commander-approved gate, or a "Commander check…"
+// title), or "".
+func (b board) commanderCheckAfter(project, id string) string {
+	best := ""
+	for _, st := range b.projectSteps[project] {
+		if stepClosed(st) || st.Superseded || !slices.Contains(st.BlockedBy, id) {
+			continue
+		}
+		if st.Lane == "commander" || (st.Gate && slices.Contains(st.Approvers, "commander")) || strings.HasPrefix(strings.ToLower(st.Title), "commander check") {
+			if best == "" || st.Title < best {
+				best = st.Title
+			}
+		}
+	}
+	return best
 }
