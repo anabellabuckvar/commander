@@ -195,7 +195,7 @@ func Opener(r nextactor.Result) string {
 		if who == "" {
 			return "Waiting:"
 		}
-		return "Waiting on " + clip(who, 40) + ":"
+		return "Waiting on " + clipKeepTime(who, 40) + ":"
 	}
 	switch strings.TrimPrefix(r.Reason, "blocked:") {
 	case "paused":
@@ -206,6 +206,29 @@ func Opener(r nextactor.Result) string {
 		return "Done:"
 	}
 	return "Quiet:"
+}
+
+// clipKeepTime clips who to max runes, but keeps a trailing "(… UTC)" time
+// whole: "check for a successful… (Nov 17 19:30 UTC)", never "… (Nov 17…".
+func clipKeepTime(who string, max int) string {
+	if len([]rune(who)) <= max {
+		return who
+	}
+	if i := strings.LastIndex(who, " ("); i > 0 && strings.HasSuffix(who, ")") {
+		tail := who[i:]
+		room := max - len([]rune(tail))
+		if room < 12 {
+			room = 12
+		}
+		head := strings.TrimSuffix(who[:i], "…")
+		if len([]rune(head)) > room {
+			head = clip(head, room)
+		} else if strings.HasSuffix(who[:i], "…") {
+			head += "…"
+		}
+		return head + tail
+	}
+	return clip(who, max)
 }
 
 // rowFacts is what the describer may say, as plain lines. It leaves out

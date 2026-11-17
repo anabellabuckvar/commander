@@ -397,15 +397,40 @@ func urgency(actor string) int {
 // already shows the state.
 var leadingLabel = regexp.MustCompile(`^(?i:needs you|working|commander|stuck|paused|withdrawn|done|quiet|waiting(?: on [^:]{1,40})?)\s*:\s*`)
 
+// stripLeadingLabel drops a state label the model put first ("Waiting on X:"),
+// but never at a colon inside a time: "Waiting on the deploy at 2:30 PM" stays whole.
+func stripLeadingLabel(words string) string {
+	loc := leadingLabel.FindStringIndex(words)
+	if loc == nil {
+		return words
+	}
+	if c := strings.LastIndex(words[:loc[1]], ":"); c > 0 && c+1 < len(words) && isDigit(words[c-1]) && isDigit(words[c+1]) {
+		return words
+	}
+	return words[loc[1]:]
+}
+
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+
+// bareTime is a line that is only a clock time, the tail of a bad cut.
+var bareTime = regexp.MustCompile(`(?i)^\d{1,2}(:\d{2})?\s*(am|pm)?(\s+[a-z]{2,4})?$`)
+
+// stubLine reports a line too short to mean anything on its own: a bare time,
+// or a single word.
+func stubLine(words string) bool {
+	return bareTime.MatchString(words) || len(strings.Fields(words)) < 2
+}
+
 // finishDescription tidies the model's line: no state label, no quotes, a
 // capital first letter, short enough for two sidebar lines. Empty is refused.
 func finishDescription(opener, words string) (string, bool) {
 	words = strings.Join(strings.Fields(words), " ")
 	words = strings.TrimSpace(strings.TrimPrefix(words, opener))
-	words = leadingLabel.ReplaceAllString(words, "")
+	words = stripLeadingLabel(words)
 	words = strings.TrimSpace(strings.Trim(words, "\"“”"))
 	words = strings.TrimSuffix(words, ".")
-	if words == "" {
+	if words == "" || stubLine(words) {
+		// Empty, or cut down to a stub like "30 PM": the row keeps its rule-based line.
 		return "", false
 	}
 	r := []rune(words)
