@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -9,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/store"
 )
 
@@ -28,9 +28,10 @@ func acceptReason(c acceptJob) string {
 }
 
 // acceptResults closes every agent step whose run ended with a clean final
-// report, through the validated write path, and reports how many it closed.
-// The report stays on the step as its result.
-func acceptResults(ctx context.Context, list func(context.Context) ([]acceptJob, error), bc beads.Client) int {
+// report, through the guarded close command (the same validation and
+// workflow checks as any close), and reports how many it closed. The report
+// stays on the step as its result.
+func acceptResults(ctx context.Context, list func(context.Context) ([]acceptJob, error), closeStep func(ctx context.Context, project, bead, reason string) error) int {
 	jobs, err := list(ctx)
 	if err != nil {
 		log.Printf("auto-accept: list: %v", err)
@@ -38,7 +39,7 @@ func acceptResults(ctx context.Context, list func(context.Context) ([]acceptJob,
 	}
 	n := 0
 	for _, j := range jobs {
-		if err := bc.CloseWithReason(ctx, j.Path, j.Bead, acceptReason(j)); err != nil {
+		if err := closeStep(ctx, j.Project, j.Bead, acceptReason(j)); err != nil {
 			log.Printf("auto-accept: %s: %v", j.Bead, err)
 			continue
 		}
@@ -46,6 +47,26 @@ func acceptResults(ctx context.Context, list func(context.Context) ([]acceptJob,
 		n++
 	}
 	return n
+}
+
+// cmdrCommand runs the installed cmdr beside cmdrd.
+func cmdrCommand(ctx context.Context, args ...string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	c, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(c, filepath.Join(filepath.Dir(self), "cmdr"), args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%v: %s", err, firstLine(string(out), 400))
+	}
+	return nil
+}
+
+// closeWithReason closes a step through cmdr internal-close-objective.
+func closeWithReason(ctx context.Context, project, bead, reason string) error {
+	return cmdrCommand(ctx, "internal-close-objective", "--project", project, "--bead", bead, "--reason", reason)
 }
 
 // runAutoAccept accepts finished agent steps every autoAcceptEvery, and starts
@@ -58,7 +79,7 @@ func (d *Daemon) runAutoAccept(ctx context.Context) {
 			d.attempted = &answerTries{}
 		}
 		applyAnswers(ctx, d.store.PendingAnswers, d.attempted)
-		if acceptResults(ctx, d.store.AgentResultsToAccept, d.beads) > 0 {
+		if acceptResults(ctx, d.store.AgentResultsToAccept, d.tryClose) > 0 {
 			d.store.NotifyStateChanged(ctx)
 			d.autoDispatchOnce(ctx)
 		}
@@ -114,4 +135,26 @@ func applyAnswers(ctx context.Context, list func(context.Context) ([]store.Pendi
 		}
 		log.Printf("apply-answer: %s %s applied the user's recorded answer", a.Project, a.Bead)
 	}
+}
+
+// tryClose closes a step at most every ten minutes per step, so a step whose
+// close is refused is not retried every pass.
+func (d *Daemon) tryClose(ctx context.Context, project, bead, reason string) error {
+	if d.attempted == nil {
+		d.attempted = &answerTries{}
+	}
+	key := "close:" + project + ":" + bead
+	d.attempted.mu.Lock()
+	if d.attempted.last == nil {
+		d.attempted.last = map[string]time.Time{}
+	}
+	recent := time.Since(d.attempted.last[key]) < 10*time.Minute
+	if !recent {
+		d.attempted.last[key] = time.Now()
+	}
+	d.attempted.mu.Unlock()
+	if recent {
+		return fmt.Errorf("retried at most every ten minutes")
+	}
+	return closeWithReason(ctx, project, bead, reason)
 }

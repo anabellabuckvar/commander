@@ -8,6 +8,7 @@ import (
 // AcceptCandidate is an agent step whose run ended with a clean final report.
 type AcceptCandidate struct {
 	ProjectID int64
+	Project   string
 	Path      string
 	Bead      string
 	Title     string
@@ -19,11 +20,11 @@ type AcceptCandidate struct {
 // under it, no question or recorded answer pending, not held. Such a step
 // closes itself; review happens only in an explicit review step.
 func (s *Store) AgentResultsToAccept(ctx context.Context) ([]AcceptCandidate, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT b.project_id,p.path,b.id,b.title,split_part(ltrim(b.result_summary),chr(10),1)
+	rows, err := s.db.QueryContext(ctx, `SELECT b.project_id,p.name,p.path,b.id,b.title,split_part(ltrim(b.result_summary),chr(10),1)
 FROM bead_tasks b JOIN projects p ON p.id=b.project_id
 WHERE b.deleted_at IS NULL AND b.status IN('open','in_progress') AND b.result_ready_at>0 AND b.result_run_id IS NOT NULL
  AND lower(ltrim(b.result_summary)) LIKE 'final report%'
- AND ltrim(b.result_summary) !~* '^final report\W*(blocked|blocker|failed|fail\M|cannot|could not|unable|not done|incomplete)'
+ AND ltrim(b.result_summary) !~* '^final report\W*(blocked|blocker|failed|fail\M|cannot|could not|unable|not done|incomplete|stopped|aborted|partial)'
  AND NOT jsonb_exists(b.labels,'gate') AND NOT jsonb_exists(b.labels,'kind:workstream') AND NOT jsonb_exists(b.labels,'hold')
  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(b.labels) l WHERE l='lane:you' OR l LIKE 'lane:elsewhere%' OR l LIKE 'approver:%' OR l='closing-gate')
  AND NOT EXISTS(SELECT 1 FROM bead_tasks c WHERE c.project_id=b.project_id AND c.parent_id=b.id AND c.deleted_at IS NULL AND c.status<>'closed' AND NOT jsonb_exists(c.labels,'kind:task'))
@@ -38,7 +39,7 @@ ORDER BY b.result_ready_at`)
 	var out []AcceptCandidate
 	for rows.Next() {
 		var c AcceptCandidate
-		if err := rows.Scan(&c.ProjectID, &c.Path, &c.Bead, &c.Title, &c.Line); err != nil {
+		if err := rows.Scan(&c.ProjectID, &c.Project, &c.Path, &c.Bead, &c.Title, &c.Line); err != nil {
 			return nil, err
 		}
 		c.Line = strings.TrimSpace(c.Line)

@@ -219,6 +219,11 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 				if es == 0 || es >= ls || !early.notStarted() {
 					continue
 				}
+				// A review checks the work it waits on; it is out of order only
+				// against work it actually waits on.
+				if late.reviewStep() && !t.reaches(late.ID, early.ID, map[string]bool{}) {
+					continue
+				}
 				add(ShapeViolation{Rule: "impossible-order", Beads: []string{early.ID, late.ID},
 					Why: fmt.Sprintf("%q (%s) is under way while the earlier %s step %q has not started", late.Title, stageNames[ls], stageNames[es], early.Title),
 					Fix: fmt.Sprintf("finish or close %s first and make %s wait on it (dep add %s %s); if %s is left from an earlier cycle, close or supersede it; if %s is no longer needed, supersede it", early.ID, late.ID, late.ID, early.ID, late.ID, early.ID)})
@@ -426,11 +431,6 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 					Why: fmt.Sprintf("%q waits on a clock for %q, so the step sits idle after it happens", n.Title, w.Ref),
 					Fix: "use the event wait cmdrd resolves itself: --waiting deploy:<sha>, pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (optionally ,by=<RFC3339>)"})
 			}
-		}
-		if n.AnswerPending && n.closed() {
-			add(ShapeViolation{Rule: "stale-answer", Beads: []string{n.ID},
-				Why: fmt.Sprintf("the user's recorded answer on %q can never apply: the step is already closed", n.Title),
-				Fix: fmt.Sprintf("finish it: cmdr internal-resolve-needs --bead %s --resume-only (it records the answer as superseded)", n.ID)})
 		}
 	}
 	for _, id := range ids {

@@ -280,7 +280,7 @@ func IsReviewStep(s SnapStep) bool {
 	return !s.Gate && (s.Lane == "commander" || reviewTitle.MatchString(s.Title))
 }
 
-var blockedReport = regexp.MustCompile(`(?i)^\s*final report\W*(blocked|blocker|failed|fail\b|cannot|could not|unable|not done|incomplete)`)
+var blockedReport = regexp.MustCompile(`(?i)^\s*final report\W*(blocked|blocker|failed|fail\b|cannot|could not|unable|not done|incomplete|stopped|aborted|partial)`)
 
 // CleanReport: a result line that is a final report and does not say the
 // work is blocked or failed. A clean final report closes its step.

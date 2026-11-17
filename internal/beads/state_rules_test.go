@@ -27,10 +27,8 @@ func TestStateTimeWaitForADeploy(t *testing.T) {
 
 func TestStateBadWaitAndStaleAnswer(t *testing.T) {
 	s := step("W.1.4", "W.1", "Watch", "waiting:notanumber:until")
-	g := step("W.1.5", "W.1", "Approve", "gate", "approver:user")
-	g.Status, g.AnswerPending = "closed", true
-	vs := ShapeCheck([]ShapeNode{ws("W"), track("W.1", "W", "Fix"), s, g})
-	if r := rulesOf(vs); r["bad-wait"] != 1 || r["stale-answer"] != 1 {
+	vs := ShapeCheck([]ShapeNode{ws("W"), track("W.1", "W", "Fix"), s})
+	if r := rulesOf(vs); r["bad-wait"] != 1 {
 		t.Fatalf("%+v", vs)
 	}
 }
