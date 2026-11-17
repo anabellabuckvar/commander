@@ -22,7 +22,7 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			{ref: "green", title: s + " PR: get CI green and answer Devin (fix our failures; a red check from main is reported with its cause and owner)", labels: "kind:objective", after: []string{"build"}},
 			{ref: "check", title: "Commander checks the " + s + " PR (green, Devin-clean, matches the scope)", labels: "kind:objective,lane:commander", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
-			{ref: "live", title: s + " live: wait for the deploy and confirm it works on a real event", labels: "kind:objective", after: []string{"merge"}},
+			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective", after: []string{"merge"}},
 			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
 		}
 	},
@@ -55,7 +55,7 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			{ref: "green", title: s + " PR: get CI green and answer Devin", labels: "kind:objective", after: []string{"build"}},
 			{ref: "check2", title: "Commander checks the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:commander", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
-			{ref: "live", title: s + " live: wait for the deploy and confirm it works", labels: "kind:objective", after: []string{"merge"}},
+			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works", labels: "kind:objective", after: []string{"merge"}},
 			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
 		}
 	},

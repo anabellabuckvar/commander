@@ -88,3 +88,9 @@ func TestEventTimerLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestEventTimerLabelAllowsAScheduledWindow(t *testing.T) {
+	if EventTimerLabel("the deploy window opens") || !EventTimerLabel("after the deploy lands") {
+		t.Fatal("a deploy window is a real time; a deploy is an event")
+	}
+}

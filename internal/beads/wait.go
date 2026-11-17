@@ -730,4 +730,9 @@ var eventTimer = regexp.MustCompile(`(?i)\b(deploy|deploys|deployed|deployment|m
 // EventTimerLabel reports a time wait's label that stands in for an event cmdrd
 // can watch itself (a prod deploy, a PR, a notification): it must be a deploy,
 // pr or event wait, so the step continues the moment it happens, not at a clock time.
-func EventTimerLabel(label string) bool { return eventTimer.MatchString(label) }
+// timeWindow: a scheduled window ("the deploy window opens") is a real time.
+var timeWindow = regexp.MustCompile(`(?i)\b(deploy|deployment|release|maintenance|change|merge) (window|freeze)\b`)
+
+func EventTimerLabel(label string) bool {
+	return eventTimer.MatchString(label) && !timeWindow.MatchString(label)
+}
