@@ -13,7 +13,10 @@ import (
 func TestStateAuditMailsOnceAndKeepsTheRow(t *testing.T) {
 	var mails []string
 	w := &waitWatcher{woken: map[string]bool{},
-		mail: func(_ context.Context, to, subject, _ string) error { mails = append(mails, to+": "+subject); return nil },
+		mail: func(_ context.Context, to, subject, _ string) error {
+			mails = append(mails, to+": "+subject)
+			return nil
+		},
 		shapeReport: func(context.Context, string) ([]beads.ShapeViolation, error) {
 			return []beads.ShapeViolation{
 				{Rule: "hidden-review", Beads: []string{"vibe-apps-596t.13.2", "vibe-apps-596t.13.3"}, Why: "hidden", Fix: "add a check"},
