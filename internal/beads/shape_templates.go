@@ -34,7 +34,9 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 		}
 		deployAfter := "validate"
 		if ownerGo {
-			steps = append(steps, planStep{ref: "go", title: "Greenlight shipping release " + s, labels: "kind:objective,gate,approver:user", after: []string{"validate"}})
+			steps = append(steps,
+				planStep{ref: "check", title: "Commander checks release " + s + " (validate green on the final tree, receipt written, what was dropped and why)", labels: "kind:objective,lane:commander", after: []string{"validate"}},
+				planStep{ref: "go", title: "Greenlight shipping release " + s, labels: "kind:objective,gate,approver:user", after: []string{"check"}})
 			deployAfter = "go"
 		}
 		return append(steps,
@@ -43,6 +45,19 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective", after: []string{"watch"}},
 			planStep{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"mainline"}},
 		)
+	},
+	"propose-then-approve": func(s string, _ bool) []planStep {
+		return []planStep{
+			{ref: "propose", title: "Propose " + s + " (what, why, and how it will be checked)", labels: "kind:objective"},
+			{ref: "check", title: "Commander checks the " + s + " proposal (complete, matches the scope)", labels: "kind:objective,lane:commander", after: []string{"propose"}},
+			{ref: "approve", title: "Approve " + s, labels: "kind:objective,gate,approver:user", after: []string{"check"}},
+			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective", after: []string{"approve"}},
+			{ref: "green", title: s + " PR: get CI green and answer Devin", labels: "kind:objective", after: []string{"build"}},
+			{ref: "check2", title: "Commander checks the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:commander", after: []string{"green"}},
+			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
+			{ref: "live", title: s + " live: wait for the deploy and confirm it works", labels: "kind:objective", after: []string{"merge"}},
+			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
+		}
 	},
 	"investigation": func(s string, _ bool) []planStep {
 		return []planStep{

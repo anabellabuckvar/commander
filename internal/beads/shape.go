@@ -278,6 +278,23 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 		if n.closed() {
 			continue
 		}
+		// j. no hidden review: an agent's result reaches the user only through an
+		// explicit Commander check step, never through a review nobody can see.
+		if n.gate() && n.prefixed("approver:") == "user" && !n.closing() {
+			for _, bid := range n.Blockers {
+				w, ok := t.byID[bid]
+				if !ok || w.gate() || w.Parent != n.Parent {
+					continue
+				}
+				lane := w.prefixed("lane:")
+				if lane == "commander" || lane == "you" || strings.HasPrefix(lane, "elsewhere") || commanderOwnTitle.MatchString(w.Title) {
+					continue
+				}
+				add(ShapeViolation{Rule: "hidden-review", Beads: []string{w.ID, n.ID},
+					Why: fmt.Sprintf("Eric's gate %q follows the agent step %q directly, so the Commander's review of its result is hidden", n.Title, w.Title),
+					Fix: fmt.Sprintf("add a Commander check step (lane:commander) that waits on %s, and make %s wait on that check instead", w.ID, n.ID)})
+			}
+		}
 		// c. the Commander's own steps stay in the Commander column
 		if commanderOwnTitle.MatchString(n.Title) {
 			lane := n.prefixed("lane:")
