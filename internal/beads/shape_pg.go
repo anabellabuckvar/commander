@@ -137,7 +137,7 @@ func pgShapeLoad(ctx context.Context, q store.Querier, pid int64, roots []string
   UNION
   SELECT b.id FROM bead_tasks b JOIN t ON b.parent_id=t.id WHERE b.project_id=? AND b.deleted_at IS NULL)
 SELECT b.id,b.title,b.status,b.labels,COALESCE(b.parent_id,''),COALESCE(b.responsible_agent_id,''),COALESCE(b.assigned_agent,''),
-  (COALESCE(b.description,'')<>''),(COALESCE(b.description,'')<>'' AND COALESCE(b.acceptance_criteria,'')<>''),commander_pending_human_answer(b.project_id,b.id),
+  (COALESCE(b.description,'')<>''),(COALESCE(b.description,'')<>'' AND COALESCE(b.acceptance_criteria,'')<>''),commander_pending_human_answer(b.project_id,b.id),COALESCE(b.close_reason,''),
   COALESCE((SELECT json_agg(d.depends_on_id) FROM bead_dependencies d WHERE d.project_id=b.project_id AND d.issue_id=b.id AND d.type='blocks'),'[]')
 FROM bead_tasks b JOIN t ON t.id=b.id WHERE b.project_id=?`, append(args, pid)...)
 	if e != nil {
@@ -148,7 +148,7 @@ FROM bead_tasks b JOIN t ON t.id=b.id WHERE b.project_id=?`, append(args, pid)..
 	for rows.Next() {
 		var n ShapeNode
 		var labels, blockers []byte
-		if e = rows.Scan(&n.ID, &n.Title, &n.Status, &labels, &n.Parent, &n.Responsible, &n.Assigned, &n.HasReason, &n.HasBrief, &n.AnswerPending, &blockers); e != nil {
+		if e = rows.Scan(&n.ID, &n.Title, &n.Status, &labels, &n.Parent, &n.Responsible, &n.Assigned, &n.HasReason, &n.HasBrief, &n.AnswerPending, &n.CloseReason, &blockers); e != nil {
 			return nil, e
 		}
 		_ = json.Unmarshal(labels, &n.Labels)
@@ -211,7 +211,18 @@ func pgShapeGuard(ctx context.Context, q store.Querier, pid int64, ops [][]strin
 	}
 	bad := append(ShapeReshape(before, batch.creates, batch.referenced), ShapeNew(ShapeCheck(before), ShapeCheck(after))...)
 	bad = append(bad, ShapeTransitions(before, after, pgCallerValue(ctx, "COMMANDER_ROLE") != "")...)
+	// The tree-edit endpoint (a versioned plan) is also held to the numbered
+	// rules: only problems the batch introduces refuse it.
+	if planBasisOf(ctx) != nil {
+		bad = append(bad, planDeletes(ops)...)
+		bad = append(bad, ShapeNew(TreeRules(before), TreeRules(after))...)
+		bad = append(bad, TreeTransitions(before, after)...)
+		if ContentGrader != nil {
+			bad = append(bad, ContentGrader(ctx, changedNodes(before, after, batch.touched), after)...)
+		}
+	}
 	if len(bad) > 0 {
+		bad = numbered(bad)
 		return errors.New(FormatShapeRefusal(bad))
 	}
 	return nil
@@ -250,5 +261,5 @@ func PlanShapeReport(ctx context.Context, dir string, roots []string) ([]ShapeVi
 	if e != nil {
 		return nil, e
 	}
-	return ShapeCheck(nodes), nil
+	return numbered(append(ShapeCheck(nodes), TreeRules(nodes)...)), nil
 }

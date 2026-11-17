@@ -251,8 +251,8 @@ func TestPostgresShapeGuardRefusesBatch(t *testing.T) {
 		t.Fatal(e)
 	}
 	resp := postgresApplyOps(ctx, dir, [][]string{
-		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective", "--assignee", "operator-x", "--silent"},
-		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective", "--assignee", "operator-x", "--silent"},
+		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"},
+		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"},
 	})
 	if resp.Exit == 0 || !strings.Contains(resp.Error, "duplicate-step") || !strings.Contains(resp.Error, "nothing was written") {
 		t.Fatalf("duplicate batch not refused: %+v", resp)
@@ -261,7 +261,7 @@ func TestPostgresShapeGuardRefusesBatch(t *testing.T) {
 	if e != nil || len(listed) != 2 {
 		t.Fatalf("refused batch wrote rows: %d %v", len(listed), e)
 	}
-	resp = postgresApplyOps(ctx, dir, [][]string{{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective", "--assignee", "operator-x", "--silent"}})
+	resp = postgresApplyOps(ctx, dir, [][]string{{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"}})
 	if resp.Exit != 0 {
 		t.Fatalf("valid single step refused: %+v", resp)
 	}

@@ -185,7 +185,8 @@ type SnapWorkstream struct {
 	ProjectID            int64           `json:"project_id"`
 	BeadID               string          `json:"bead_id"`
 	Title                string          `json:"title"`
-	Tickets              []string        `json:"tickets,omitempty"` // Linear ids of its ticket: labels
+	Tickets              []string        `json:"tickets,omitempty"`  // Linear ids of its ticket: labels
+	Criteria             string          `json:"criteria,omitempty"` // its acceptance criteria
 	State                string          `json:"state"`
 	Working              bool            `json:"working,omitempty"` // an agent under it is working now
 	Status               string          `json:"status"`
@@ -523,7 +524,7 @@ func snapWorkstream(n int, ws Workstream, live LiveAgent) SnapWorkstream {
 		ResultRunID: r.ResultRunID, ResultReadyAt: r.ResultReadyAt, QuestionWaiting: r.QuestionWaiting, HumanAnswerPending: r.HumanAnswerPending,
 		ExecutionMode: r.ExecutionMode, ExecutionReady: r.ExecutionReady, ExecutionEligible: r.ExecutionEligible, ExecutionReserved: r.ExecutionReserved, ExecutionCapable: r.ExecutionCapable, ExecutionAttempts: r.ExecutionAttempts, ExecutionError: r.ExecutionError,
 		PlanningPending: r.PlanningPending, PlanningCommander: r.PlanningCommander, JurisdictionRevision: r.JurisdictionRevision,
-		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets,
+		BlockedBy: slices.Clone(r.BlockedBy), N: n, Project: ws.Project.Name, Repo: GitHubRepo(ws.Project.Path), ProjectID: ws.Project.ID, BeadID: r.BeadID, Title: r.Title, Tickets: r.Tickets, Criteria: strings.TrimSpace(r.Criteria),
 		State: state, Working: working, Status: r.Status, Owner: r.Owner, Starred: r.Starred, Hold: r.Hold, HoldReason: r.HoldReason, Review: r.Review,
 		Withdrawn: r.Withdrawn, ProgressAt: r.ProgressAt, TypedWaits: r.Waits, Phase: r.Phase, Runtime: r.Runtime,
 		Ask: r.Ask, Note: r.Note, Decision: r.Decision,

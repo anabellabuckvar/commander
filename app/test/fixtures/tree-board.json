@@ -1,0 +1,392 @@
+{
+  "version": 42,
+  "asof": 1800000000,
+  "done": 1,
+  "total": 3,
+  "needs_you": 1,
+  "rows": [
+    {
+      "id": "w1",
+      "key": "app:w1",
+      "project": "app",
+      "label": "1",
+      "depth": 0,
+      "title": "Notify: every notification goes through Notify",
+      "tix": [
+        "FOR-100"
+      ],
+      "ac": [
+        "Every notification is sent through Notify"
+      ],
+      "sum": "Phase 1 is in its build and phase 2 waits on your credentials; phase 3 follows phase 1.",
+      "done": false,
+      "pct": 0,
+      "of": "0 of 4 workstreams",
+      "needs_you": 1,
+      "state": "Needs you",
+      "status": [
+        {
+          "tone": "you",
+          "text": "Needs you"
+        },
+        {
+          "tone": "agent",
+          "text": "Implementer working"
+        }
+      ],
+      "line": {
+        "tone": "sum",
+        "text": "Phase 1 is in its build and phase 2 waits on your credentials; phase 3 follows phase 1."
+      },
+      "now": "Phase 1 is in its build and phase 2 waits on your credentials; phase 3 follows phase 1."
+    },
+    {
+      "id": "w1.1",
+      "key": "app:w1.1",
+      "project": "app",
+      "parent": "w1",
+      "label": "1.1",
+      "depth": 1,
+      "title": "Phase 1: first notices",
+      "tix": [
+        "FOR-101"
+      ],
+      "ac": [
+        "Failed restarts go through Notify",
+        "You see one in your inbox"
+      ],
+      "done": false,
+      "pct": 25,
+      "of": "1 of 4 steps",
+      "needs_you": 0,
+      "state": "Implementer working",
+      "status": [
+        {
+          "tone": "agent",
+          "text": "Implementer working"
+        }
+      ],
+      "line": {
+        "tone": "agent",
+        "text": "Implementer agent: build the cutover and open its PR"
+      },
+      "now": "Implementer working"
+    },
+    {
+      "id": "w1.2",
+      "key": "app:w1.2",
+      "project": "app",
+      "parent": "w1",
+      "label": "1.2",
+      "depth": 1,
+      "title": "Phase 2: alerts",
+      "done": false,
+      "pct": 0,
+      "of": "0 of 2 steps",
+      "needs_you": 1,
+      "state": "Needs you",
+      "status": [
+        {
+          "tone": "you",
+          "text": "Needs you"
+        },
+        {
+          "tone": "agent",
+          "text": "Implementer working"
+        }
+      ],
+      "line": {
+        "tone": "you",
+        "text": "Needs you: load the new credentials"
+      },
+      "now": "Needs you"
+    },
+    {
+      "id": "w1.3",
+      "key": "app:w1.3",
+      "project": "app",
+      "parent": "w1",
+      "label": "1.3",
+      "depth": 1,
+      "title": "Phase 3: everything else",
+      "done": false,
+      "pct": 0,
+      "of": "0 of 2 steps",
+      "needs_you": 0,
+      "state": "Blocked by 1.1",
+      "status": [
+        {
+          "tone": "none",
+          "text": "Blocked by 1.1"
+        }
+      ],
+      "line": {
+        "tone": "none",
+        "text": "Blocked by 1.1"
+      },
+      "now": "Blocked by 1.1"
+    },
+    {
+      "id": "w1.4",
+      "key": "app:w1.4",
+      "project": "app",
+      "parent": "w1",
+      "label": "1.4",
+      "depth": 1,
+      "title": "Paused work",
+      "note": "Paused",
+      "done": false,
+      "pct": 0,
+      "of": "0 of 1 step",
+      "needs_you": 0,
+      "state": "Paused",
+      "status": [
+        {
+          "tone": "none",
+          "text": "Paused"
+        }
+      ],
+      "line": {
+        "tone": "none",
+        "text": "Paused"
+      },
+      "now": "Paused"
+    },
+    {
+      "id": "w2",
+      "key": "app:w2",
+      "project": "app",
+      "label": "2",
+      "depth": 0,
+      "title": "Fix today's deploy",
+      "done": false,
+      "pct": 33,
+      "of": "1 of 3 steps",
+      "needs_you": 0,
+      "state": "Waiting on Platform team",
+      "status": [
+        {
+          "tone": "person",
+          "text": "Waiting on Platform team"
+        }
+      ],
+      "line": {
+        "tone": "person",
+        "text": "Waiting on Platform team: the platform team reviews and merges PR 77"
+      },
+      "now": "Waiting on Platform team"
+    },
+    {
+      "id": "w3",
+      "key": "app:w3",
+      "project": "app",
+      "label": "3",
+      "depth": 0,
+      "title": "Write the release note",
+      "done": true,
+      "pct": 100,
+      "of": "1 of 1 step",
+      "needs_you": 0,
+      "state": "done",
+      "status": [
+        {
+          "tone": "none",
+          "text": "Done"
+        }
+      ],
+      "line": {
+        "tone": "none",
+        "text": "Done"
+      },
+      "now": "✓ Completed"
+    }
+  ],
+  "steps": [
+    {
+      "id": "w1.1.1",
+      "row": "w1.1",
+      "title": "Inventory every sender",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "done",
+      "col": -1,
+      "own": "✓ Implementer agent",
+      "text": "Done"
+    },
+    {
+      "id": "w1.1.2",
+      "row": "w1.1",
+      "title": "Build the cutover and open its PR",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "active",
+      "col": 0,
+      "run": "claude",
+      "model": "Claude",
+      "own": "Implementer agent · Claude",
+      "text": "Working on “Build the cutover”",
+      "since": 1799998500
+    },
+    {
+      "id": "w1.1.3",
+      "row": "w1.1",
+      "title": "Review: the cutover PR is green",
+      "type": "review",
+      "owner": "Review agent",
+      "state": "notstarted",
+      "col": 1,
+      "own": "Review agent",
+      "text": "Not started"
+    },
+    {
+      "id": "w1.1.4",
+      "row": "w1.1",
+      "title": "Merge the cutover PR",
+      "type": "you",
+      "owner": "You",
+      "state": "notstarted",
+      "col": 2,
+      "own": "You",
+      "text": "Not reached",
+      "gate": true
+    },
+    {
+      "id": "w1.2.1",
+      "row": "w1.2",
+      "title": "Live check: the next real notice goes through Notify",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "active",
+      "col": 0,
+      "asleep": true,
+      "own": "Implementer agent · asleep",
+      "wt": "Asleep until prod deploy with abc123",
+      "text": "Waiting on prod deploy with abc123",
+      "since": 1799989200
+    },
+    {
+      "id": "w1.2.2",
+      "row": "w1.2",
+      "title": "Load the new credentials",
+      "type": "you",
+      "owner": "You",
+      "state": "active",
+      "col": 0,
+      "own": "You",
+      "ask": "Load the three credential values?",
+      "text": "Needs you: Load the three credential values?",
+      "since": 1799997000,
+      "gate": true
+    },
+    {
+      "id": "w1.3.1",
+      "row": "w1.3",
+      "title": "Move the remaining senders",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "notstarted",
+      "col": 3,
+      "own": "Implementer agent",
+      "wt": "After 1.1",
+      "text": "Not started"
+    },
+    {
+      "id": "w1.3.2",
+      "row": "w1.3",
+      "title": "Review: the remaining senders moved",
+      "type": "review",
+      "owner": "Review agent",
+      "state": "notstarted",
+      "col": 4,
+      "own": "Review agent",
+      "text": "Not started"
+    },
+    {
+      "id": "w1.4.1",
+      "row": "w1.4",
+      "title": "Measure the slow page",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "notstarted",
+      "col": 1,
+      "own": "Implementer agent",
+      "wt": "Parked",
+      "text": "Parked"
+    },
+    {
+      "id": "w2.1",
+      "row": "w2",
+      "title": "Fix the deploy failure",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "done",
+      "col": -1,
+      "own": "✓ Implementer agent",
+      "text": "Done"
+    },
+    {
+      "id": "w2.2",
+      "row": "w2",
+      "title": "The platform team reviews and merges PR 77",
+      "type": "person",
+      "owner": "Platform team",
+      "state": "active",
+      "col": 0,
+      "own": "Platform team",
+      "wt": "Waiting for review: waiting on Platform team (#77)",
+      "text": "Waiting for review: waiting on Platform team (#77)"
+    },
+    {
+      "id": "w2.3",
+      "row": "w2",
+      "title": "Ship it and watch prod",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "notstarted",
+      "col": 1,
+      "own": "Implementer agent",
+      "text": "Not started"
+    },
+    {
+      "id": "w3.1",
+      "row": "w3",
+      "title": "Write the note",
+      "type": "agent",
+      "owner": "Implementer agent",
+      "state": "done",
+      "col": -1,
+      "own": "✓ Implementer agent",
+      "text": "Done"
+    }
+  ],
+  "edges": [
+    [
+      "w1.1.1",
+      "w1.3.1"
+    ],
+    [
+      "w1.1.2",
+      "w1.1.3"
+    ],
+    [
+      "w1.1.3",
+      "w1.1.4"
+    ],
+    [
+      "w1.1.4",
+      "w1.3.1"
+    ],
+    [
+      "w1.3.1",
+      "w1.3.2"
+    ],
+    [
+      "w2.1",
+      "w2.2"
+    ],
+    [
+      "w2.2",
+      "w2.3"
+    ]
+  ]
+}

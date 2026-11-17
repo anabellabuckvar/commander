@@ -110,3 +110,21 @@ func jsonl(t *testing.T, events []Event) []byte {
 	}
 	return []byte(b.String())
 }
+
+// What rides ahead of a message (the board and the tree board's selection) is
+// not what the user wrote.
+func TestSeenDigestDropsTheBoardAndSelection(t *testing.T) {
+	at := time.Unix(1_800_000_000, 0).UTC()
+	var log []byte
+	for _, e := range []Event{
+		{Seq: 1, Kind: KindUser, Origin: "user", Source: SourceEngine, Time: at, Text: "<workstream-statuses version=\"7\">\nBoard v7: 0 of 1 workstreams done\n</workstream-statuses>\n<selection kind=\"step\" id=\"w1.2\" key=\"app:w1.2\" label=\"1\" title=\"Merge it\">Step in 1 Notify: Merge it</selection>\n\nthis is wrong"},
+		{Seq: 2, Kind: KindText, Source: SourceEngine, Time: at, Text: "Fixed it."},
+	} {
+		line, _ := json.Marshal(e)
+		log = append(append(log, line...), '\n')
+	}
+	got := SeenDigest(seenHome(t, log), "commander", SeenExchanges)
+	if !strings.Contains(got, "User: this is wrong") || strings.Contains(got, "selection") || strings.Contains(got, "Board v7") {
+		t.Fatalf("digest:\n%s", got)
+	}
+}

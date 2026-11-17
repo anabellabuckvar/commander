@@ -9,6 +9,7 @@
 
 import type { TabInfo } from '../../features/inspector/types'
 import { useStore } from './store'
+import { selectionBlock } from '../../features/treeboard/selection'
 
 /** setPanel is kept for InspectorColumn; the panel no longer rides along with messages. */
 export function setPanel(_tabs: TabInfo[], _showing: string) {}
@@ -22,6 +23,13 @@ export function resetSentVersions() {
 }
 
 export async function screenContext(role: string): Promise<string> {
+  const statuses = await statusesBlock(role)
+  // What the tree board's right panel has open goes to the Commander after the statuses.
+  const sel = role === 'commander' || role.startsWith('commander-') ? selectionBlock() : ''
+  return [statuses, sel].filter(Boolean).join('\n')
+}
+
+async function statusesBlock(role: string): Promise<string> {
   // Operators get no board; Commander and the Managers get the statuses.
   if (role !== 'commander' && !role.startsWith('commander-') && !role.startsWith('manager-')) return ''
   const cfg = useStore.getState().config

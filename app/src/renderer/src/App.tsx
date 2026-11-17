@@ -17,6 +17,8 @@ import { useShell } from './shell'
 import { HEADER_SLOT_ID } from '../../features/chat/Header'
 import { applyTheme, loadTheme } from './theme'
 import { StartScreen } from './components/StartScreen'
+import { TreeBoard } from '../../features/treeboard/TreeBoard'
+import { useBoardMode } from '../../features/treeboard/mode'
 
 const RAIL = 56
 const NAV = { def: 340, min: 260, max: 520 }
@@ -142,6 +144,7 @@ export function App() {
       return s
     })
   }, [])
+  const board = useBoardMode((s) => s.mode)
   const isNarrow = winW - RAIL - nav - CHAT.min < PANE_SPLIT_MIN
   useEffect(() => useStore.getState().setNarrow(isNarrow), [isNarrow])
   const tabbed = focused && narrow
@@ -149,6 +152,15 @@ export function App() {
   const dragChat = useCallback((dx: number) => setSizes((s) => ({ ...s, chat: clamp(s.chat + dx, CHAT.min, CHAT.max) })), [])
 
   if (conn === 'no-token') return <NoToken />
+
+  // The tree board is the default view; the classic board stays one click away.
+  if (board === 'tree')
+    return (
+      <div className={`app app-tree platform-${platform}${host ? ' in-host' : ' in-web'}`}>
+        <TreeBoard />
+        <StartScreen />
+      </div>
+    )
 
   return (
     <div className={`app platform-${platform}${host ? ' in-host' : ' in-web'}`}>

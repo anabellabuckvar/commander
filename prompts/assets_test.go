@@ -405,7 +405,7 @@ func TestNestedWorkstreamsInPrompts(t *testing.T) {
 		role    string
 		needles []string
 	}{
-		{RoleCommander, []string{"Workstreams nest: one per outcome", "all workstreams or all steps", "an area of attention the user would rank on its own", "--workstream", "--take-open-steps", "internal-track convert", "internal-move-objective", "cmdr graph check"}},
+		{RoleCommander, []string{"Workstreams nest: one per outcome", "all workstreams or all steps", "an area of attention the user would rank on its own", `"kind": "workstream"`, "`move` each of those steps into it in the same batch", "internal-move-objective", "cmdr graph check"}},
 		{RoleManager, []string{"Workstreams nest: one per outcome", "all workstreams or all steps", "only for a genuinely new area the user would rank on its own", "--parent <workstream> --workstream", "--take-open-steps"}},
 	} {
 		body, err := roleBody(tc.role)
@@ -488,9 +488,8 @@ func TestCrossProjectWaitTeachesOnlyWhatExists(t *testing.T) {
 		"`ci:<owner/repo>#N` fires when the PR's checks settle, not on merge", "`main-ci:<owner/repo>@<short sha of 7-12 hex>`", "`prod-tag:<owner/repo>@<short sha of 7-12 hex>`",
 		// prodTagFor reads one prefix and prodTagsChecked tags.
 		"the last 15 tags by name that start with cmdrd's one prefix", "A full sha is too long to record", "a long repo name can be refused",
-		// internal-gate link takes any edge; internal-dep refuses kind:track (checkNotGateEdge).
-		"`cmdr internal-gate link --project <p> --bead <nested workstream> --after <nested workstream it waits on>`", "`cmdr internal-dep add` refuses a bead still labelled `kind:track`",
-		"Work in a different top-level workstream of the same project: `cmdr internal-dep add`, or the same `cmdr internal-gate link` when either end is nested",
+		// Every edge is a link tree edit through the one write path.
+		"a `link` tree edit (`\"id\"` waits, `\"after\"` is what it waits on)", "a `link` edit from the waiting step to that step",
 		// livedata TestBoardReadsOnlyTheBeadAnEdgePointsAt holds these to the Board.
 		"never of what is under it", "An edge to a workstream or a parent step only sets the order", "put the edge on the step doing that work",
 	} {

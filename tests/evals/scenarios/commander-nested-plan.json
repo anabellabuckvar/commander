@@ -2,9 +2,9 @@
   "name": "Commander creates a workstream goal and dependent tasks in one retryable request",
   "ops": [
     ["create", "Urgent integration", "--ref", "work", "--labels", "kind:workstream"],
-    ["create", "Restore the integration", "--parent", "$work", "--ref", "goal"],
-    ["create", "Implement the fix", "--parent=$goal", "--ref", "task", "--description", "Preserve literal $goal in this brief", "--acceptance", "The regression passes"],
-    ["create", "Verify the fix", "--parent", "$goal", "--ref", "verify"],
+    ["create", "Restore the integration", "--parent", "$work", "--ref", "goal", "--labels", "kind:workstream"],
+    ["create", "Implement the fix", "--parent=$goal", "--ref", "task", "--labels", "kind:objective,lane:agents", "--description", "Preserve literal $goal in this brief", "--acceptance", "The regression passes"],
+    ["create", "Verify the fix", "--parent", "$goal", "--ref", "verify", "--labels", "kind:objective,lane:agents", "--description", "Run the regression against the fix.", "--acceptance", "Final report quotes the passing run"],
     ["dep", "add", "$verify", "$task"],
     ["comments", "add", "$task", "Keep $goal literal in this evidence"]
   ],

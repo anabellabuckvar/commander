@@ -61,6 +61,86 @@ func applyDescriptions(describe DescribeFunc, snap *Snapshot, d *Display) {
 		}
 		tracks(r.Tracks)
 	}
+	applySummaries(describe, snap, d)
+}
+
+// applySummaries asks the describer for the tree board's summary of each open
+// workstream that holds workstreams, from the facts the board itself shows.
+func applySummaries(describe DescribeFunc, snap *Snapshot, d *Display) {
+	view := *snap
+	view.Display = d
+	tree := BuildTree(view, time.Now().Unix())
+	for _, r := range tree.Rows {
+		if r.Done || !treeParent(tree, r.ID) {
+			continue
+		}
+		text, _, ok := describe("summary:"+r.Key, "summary", "summary", "Summary:", treeFacts(tree, r))
+		if !ok || namesCommander(text) {
+			continue
+		}
+		if d.Summaries == nil {
+			d.Summaries = map[string]string{}
+		}
+		d.Summaries[r.ID] = text
+	}
+}
+
+func treeParent(t Tree, id string) bool {
+	for _, r := range t.Rows {
+		if r.Parent == id {
+			return true
+		}
+	}
+	return false
+}
+
+// treeFacts is what the board shows under a workstream, for its summary: its
+// criteria, and each workstream inside with its state and its open steps.
+// No ages: a summary is rewritten for what changed, not for the clock.
+func treeFacts(t Tree, row TreeRow) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Workstream: %s\n", row.Title)
+	for _, c := range row.Criteria {
+		fmt.Fprintf(&b, "Acceptance criterion: %s\n", c)
+	}
+	steps := map[string][]TreeStep{}
+	for _, s := range t.Steps {
+		steps[s.Row] = append(steps[s.Row], s)
+	}
+	inside := map[string]bool{row.ID: true}
+	for _, r := range t.Rows {
+		if !inside[r.Parent] {
+			continue
+		}
+		inside[r.ID] = true
+		state := r.State
+		if r.Done {
+			state = "done"
+		}
+		fmt.Fprintf(&b, "\nInside: %s (%s, %s)\n", r.Title, state, r.Of)
+		if r.Done {
+			continue
+		}
+		for _, s := range steps[r.ID] {
+			if s.State == "done" {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s: %s, owner %s", map[bool]string{true: "now", false: "later"}[s.Col == 0], s.Title, s.Owner)
+			if s.Wait != "" {
+				fmt.Fprintf(&b, " (%s)", s.Wait)
+			}
+			if s.Ask != "" {
+				fmt.Fprintf(&b, " (asks you: %s)", s.Ask)
+			}
+			b.WriteString("\n")
+		}
+	}
+	for _, s := range steps[row.ID] {
+		if s.State != "done" {
+			fmt.Fprintf(&b, "Own step: %s, owner %s\n", s.Title, s.Owner)
+		}
+	}
+	return b.String()
 }
 
 // aboutLine is a parent workstream's line: what it covers across its nested

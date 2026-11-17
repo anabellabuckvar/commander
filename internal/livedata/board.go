@@ -22,6 +22,10 @@ type Display struct {
 	Commander   BoardCommander `json:"commander"`
 	Asks        []BoardAsk     `json:"asks"`
 	Workstreams []BoardRow     `json:"workstreams"`
+	// Summaries: the describer's line for each open workstream that holds
+	// workstreams (by bead id): where it stands against its goal, what is left
+	// and who it hinges on. The tree view shows it in the Now column.
+	Summaries map[string]string `json:"summaries,omitempty"`
 }
 
 // BoardCommander is Commander's row.

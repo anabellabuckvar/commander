@@ -152,8 +152,9 @@ func seenTurns(raw []byte) []seenTurn {
 }
 
 // userScreen is the block the app sends ahead of a message (workstream
-// statuses, or the older <user-screen>); the user sees only what they typed.
-var userScreen = regexp.MustCompile(`^\s*(<user-screen>[\s\S]*?</user-screen>|<workstream-statuses\b[\s\S]*?</workstream-statuses>)\s*`)
+// statuses, or the older <user-screen>), then what the tree board has open
+// (<selection>); the user sees only what they typed.
+var userScreen = regexp.MustCompile(`^\s*(?:(?:<user-screen>[\s\S]*?</user-screen>|<workstream-statuses\b[\s\S]*?</workstream-statuses>)\s*)?(?:<selection\b[^>]*>[^<]*</selection>\s*)?`)
 
 func renderSeen(turns []seenTurn) string {
 	if len(turns) == 0 {

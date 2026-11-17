@@ -30,14 +30,18 @@ type ShapeNode struct {
 	HasBrief bool
 	// AnswerPending: the user's answer is recorded and not yet applied.
 	AnswerPending bool
+	// CloseReason is a closed bead's close reason (rule 27: a superseded one says why).
+	CloseReason string
 }
 
 // ShapeViolation is one broken rule with the beads it names and the fix.
 type ShapeViolation struct {
-	Rule  string   `json:"rule"`
-	Beads []string `json:"beads"`
-	Why   string   `json:"why"`
-	Fix   string   `json:"fix"`
+	Rule string `json:"rule"`
+	// Number is the rule's number on the Rules tab (0 for a check with none).
+	Number int      `json:"number,omitempty"`
+	Beads  []string `json:"beads"`
+	Why    string   `json:"why"`
+	Fix    string   `json:"fix"`
 }
 
 // Key identifies a violation independent of wording, so a write is refused
@@ -49,6 +53,13 @@ func (v ShapeViolation) Key() string {
 }
 
 func (v ShapeViolation) String() string {
+	n := v.Number
+	if n == 0 {
+		n = RuleNumber(v.Rule)
+	}
+	if n > 0 {
+		return fmt.Sprintf("[rule %d] %s — fix: %s", n, v.Why, v.Fix)
+	}
 	return fmt.Sprintf("[%s] %s — fix: %s", v.Rule, v.Why, v.Fix)
 }
 

@@ -28,7 +28,7 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 		return runPlanTemplate(args[1:], stdout, stderr)
 	}
 	if len(args) == 0 || (args[0] != "apply" && args[0] != "propose") {
-		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin); cmdr plan get --id ID; cmdr plan check [--dir PROJECT_DIR] [--workstream ID]... [--json]; cmdr plan template NAME --parent ID --subject TEXT [--owner-go]")
+		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin): {\"project\": NAME, \"edits\": [{\"op\": create|retitle|set_owner|set_criteria|move|link|unlink|supersede|close, ...}]} (or dir and raw ops); cmdr plan get --id ID; cmdr plan check [--dir PROJECT_DIR] [--workstream ID]... [--json]; cmdr plan template NAME --parent ID --subject TEXT [--owner-go]")
 		return 2
 	}
 	fs := flag.NewFlagSet("plan apply", flag.ContinueOnError)
@@ -75,12 +75,43 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 	if *proposal != "" {
 		request.Basis.CoordinationID = *proposal
 	}
-	if request.Dir == "" {
-		fmt.Fprintln(stderr, "plan requires dir")
-		return 2
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
+	if request.Dir == "" && request.Project != "" {
+		dir, e := beads.ProjectDir(ctx, request.Project)
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 1
+		}
+		request.Dir = dir
+	}
+	if request.Dir == "" {
+		fmt.Fprintln(stderr, "plan requires dir or project")
+		return 2
+	}
+	// Tree edits compile to ops and ride in the same atomic batch.
+	if len(request.Edits) > 0 {
+		if request.Publication != nil {
+			fmt.Fprintln(stderr, "publication must be a separate typed action without edits")
+			return 2
+		}
+		ops, e := beads.CompileTreeEdits(request.Edits)
+		if e != nil {
+			fmt.Fprintln(stderr, "invalid edit:", e)
+			return 2
+		}
+		request.Ops, request.Edits = append(request.Ops, ops...), nil
+	}
+	// A batch sent without the versions it was read at is checked against the tree now.
+	if request.Publication == nil && request.Basis.JurisdictionRevision == 0 && len(request.Basis.Beads) == 0 && len(request.Ops) > 0 {
+		basis, e := beads.CurrentPlanBasis(ctx, request.Dir, request.Ops)
+		if e != nil {
+			fmt.Fprintln(stderr, e)
+			return 1
+		}
+		basis.RequestID, basis.CoordinationID = request.Basis.RequestID, request.Basis.CoordinationID
+		request.Basis = basis
+	}
 	var result beads.DoorResponse
 	var e error
 	if request.Publication != nil {

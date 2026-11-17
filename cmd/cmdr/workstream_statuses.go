@@ -11,15 +11,15 @@ import (
 	"github.com/example-user/commander/internal/livedata"
 )
 
-// runWorkstreamStatuses prints "workstream statuses": exactly what the user's
-// sidebar shows (rows, tracks, colours, NEEDS YOU) at the current board
-// version. It is built by the same function as the block the app attaches to
-// the user's messages, from the same snapshot, so the two never differ.
+// runWorkstreamStatuses prints "workstream statuses": the board tree exactly as
+// the app's tree view draws it (every workstream nested to any depth, its
+// line, and every open step by column with its card's lines). It is built by
+// the same function as the tree view's data (GET /api/tree) and the block the
+// app attaches to the user's messages, from the same snapshot, so they never differ.
 func runWorkstreamStatuses(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("workstream-statuses", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	asJSON := fs.Bool("json", false, "print the JSON body only")
-	role := fs.String("role", "commander", "whose board version to stamp (commander or a manager-* role)")
+	asJSON := fs.Bool("json", false, "print the tree as the app reads it (GET /api/tree)")
 	file := fs.String("snapshot", "", "read the snapshot from this file instead of cmdrd")
 	wsN := fs.Int("workstream", 0, "print workstream N exactly as the app's Workflow tab draws it")
 	stepID := fs.String("step", "", "print one drawn step's full detail (bead id)")
@@ -39,12 +39,13 @@ func runWorkstreamStatuses(args []string, stdout, stderr io.Writer) int {
 	if *wsN > 0 || *stepID != "" {
 		return printWorkflowView(snap, *wsN, *stepID, *asJSON, stdout, stderr)
 	}
-	st := livedata.WorkstreamStatuses(snap, *role, time.Now().Unix())
+	now := time.Now().Unix()
+	t := livedata.BuildTree(snap, now)
 	if *asJSON {
-		fmt.Fprintln(stdout, st.JSON())
+		fmt.Fprintln(stdout, t.JSON())
 		return 0
 	}
-	fmt.Fprintln(stdout, st.Block())
+	fmt.Fprintln(stdout, t.Text(now))
 	return 0
 }
 

@@ -431,6 +431,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/overview", s.auth(http.HandlerFunc(s.serveOverview)))
 	mux.Handle("GET /api/snapshot", s.auth(http.HandlerFunc(s.serveSnapshot)))
 	mux.Handle("GET /api/workstream-statuses", s.auth(http.HandlerFunc(s.serveWorkstreamStatuses)))
+	mux.Handle("GET /api/tree", s.auth(http.HandlerFunc(s.serveTree)))
 	mux.Handle("GET /api/events", s.auth(http.HandlerFunc(s.serveEvents)))
 	mux.Handle("GET /api/state/events", s.auth(http.HandlerFunc(s.serveStateEvents)))
 	mux.Handle("GET /api/livedata", s.auth(http.HandlerFunc(s.serveLiveData)))

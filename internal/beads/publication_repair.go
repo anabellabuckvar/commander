@@ -125,9 +125,14 @@ type PublicationAction struct {
 	Reason  string   `json:"reason,omitempty"`
 }
 type PlanDocument struct {
-	Dir         string             `json:"dir"`
-	Basis       PlanBasis          `json:"basis"`
-	Ops         [][]string         `json:"ops,omitempty"`
+	Dir string `json:"dir"`
+	// Project names the project instead of Dir (its registered path is used).
+	Project string     `json:"project,omitempty"`
+	Basis   PlanBasis  `json:"basis"`
+	Ops     [][]string `json:"ops,omitempty"`
+	// Edits are tree edits in the board's words (CompileTreeEdits); they run
+	// after Ops in the same atomic batch.
+	Edits       []TreeEdit         `json:"edits,omitempty"`
 	Intent      *DoorIntent        `json:"intent,omitempty"`
 	Publication *PublicationAction `json:"publication,omitempty"`
 }

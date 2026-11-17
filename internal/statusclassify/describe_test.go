@@ -204,3 +204,26 @@ func TestWaitingOnAStepAlwaysReadsWaiting(t *testing.T) {
 		t.Fatalf("%q", text)
 	}
 }
+
+func TestSummaryIsWrittenWithItsOwnPromptAndLength(t *testing.T) {
+	var instruction, key string
+	long := "Phase 1 is built and its live check waits on tomorrow's deploy. Phase 2 needs the alert channels from you; " + strings.Repeat("the rest follows phase one in order. ", 8)
+	d := &Describer{Call: func(_ context.Context, k, in, _ string, out any) error {
+		instruction, key = in, k
+		raw, _ := json.Marshal(map[string]string{"description": long, "signal": "none"})
+		return json.Unmarshal(raw, out)
+	}}
+	d.init()
+	d.Describe("summary:app:w", "summary", "summary", "Summary:", "facts")
+	job, ok := d.next()
+	if !ok || !d.write(context.Background(), job) {
+		t.Fatal("summary not written")
+	}
+	text, _, ok := d.Describe("summary:app:w", "summary", "summary", "Summary:", "facts")
+	if !ok || !strings.HasPrefix(text, "Phase 1 is built") || len([]rune(text)) > maxSummaryRunes || !strings.HasSuffix(text, ".") {
+		t.Fatalf("summary %q (%d runes)", text, len([]rune(text)))
+	}
+	if instruction != summaryPrompt || !strings.HasPrefix(key, "describe:summary:") {
+		t.Fatalf("prompt or key: %q", key)
+	}
+}

@@ -49,9 +49,9 @@ Commands:
                                     operator-<name>); a running chat restarts on it and reads its history
   runtime report [--days N]         Operators per runtime over N days (default 7): started, finished, died,
                                     respawned, median time to finish, shipped, tokens
-  workstream-statuses [--json] [--role R]
-                                    What the user's sidebar shows now (rows, tracks, colours, NEEDS YOU) at the
-                                    current board version: the same body attached to his messages
+  workstream-statuses [--json]
+                                    The board tree as the app's tree view draws it: every workstream, its line,
+                                    and every open step by column (the same body attached to the user's messages)
   account list [--json]             Claude accounts (plus Codex): login, status, 5h/7d usage and when it was reported
   account add <name>                Create a Claude account (shares settings, skills, plugins, MCP) and print its login line
   account use <role> <name>         Switch a chat to a logged-in account; it restarts there and resumes the same session
