@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
+	"github.com/example-user/commander/internal/livedata"
 )
 
 // Event waits (deploy, pr, event) are resolved by cmdrd itself on the wait poll
@@ -284,10 +285,15 @@ func (w *waitWatcher) expectOverdue(ctx context.Context, b beads.Bead, wt beads.
 	if w.woken[key] {
 		return
 	}
-	subject := fmt.Sprintf("[wait overdue] %s: %s not seen by %s", b.ID, wt.Text(), wt.By.UTC().Format("Jan 2 15:04 UTC"))
-	body := fmt.Sprintf("Step %s expected %s by %s, and it has not happened. The wait still holds the step. Decide: keep waiting (move the expect-by), or act on why it has not happened.", b.ID, wt.Text(), wt.By.UTC().Format(time.RFC3339))
-	if err := w.mail(ctx, "commander", subject, body); err != nil {
-		return
+	// The board shows it red (invalid-state: wait-overdue); nobody is mailed.
+	project := w.projectOf(b)
+	w.qmu.Lock()
+	if w.overdue == nil {
+		w.overdue = map[string]livedata.InvalidState{}
 	}
+	w.overdue[b.ID] = livedata.InvalidState{Project: project, Rule: "wait-overdue", Beads: []string{b.ID},
+		Why: fmt.Sprintf("it expected %s by %s, and it has not happened", wt.Text(), wt.By.UTC().Format("Jan 2 15:04 UTC")),
+		Fix: "keep waiting (move the expect-by with ,by=<RFC3339>), or plan the step that acts on why it has not happened"}
+	w.qmu.Unlock()
 	w.woken[key] = true
 }

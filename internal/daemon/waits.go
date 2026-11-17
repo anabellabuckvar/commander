@@ -88,9 +88,11 @@ type waitWatcher struct {
 	// shapeReport and invalid: the continuous state audit (nil report: off).
 	shapeReport shapeReportFunc
 	// qmu guards queued: invalid-state items already in the Commander's queue.
-	qmu     sync.Mutex
-	queued  map[string]bool
-	invalid atomic.Pointer[[]livedata.InvalidState]
+	qmu         sync.Mutex
+	queued      map[string]bool
+	overdue     map[string]livedata.InvalidState // event waits past their expect-by, keyed by bead
+	projectName map[string]string                // project path -> name, from the last poll
+	invalid     atomic.Pointer[[]livedata.InvalidState]
 	// managerLive reports whether a workstream's Manager is running. When it is
 	// not, a resolved wait wakes the step's own running agent, or nobody (the
 	// dispatch receipt lets auto-dispatch start the step): the Commander is not

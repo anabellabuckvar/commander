@@ -49,9 +49,8 @@ Questions are blocking by default. After saving a blocking checkpoint, stop
 without a `Final report:`: the service resumes the recorded execution when the
 required answer is complete. Do not poll, wait in a loop, clear the blocker or
 start other work. For a question that does not block your current authorized
-work, pass `--blocking=false` and continue that work. An internal planning
-question is not automatically a request for the human. Only the planning
-Commander decides whether human judgment is required.
+work, pass `--blocking=false` and continue that work. A blocking question
+becomes Eric's card; his answer comes back to you and your run resumes.
 
 You are finished only when the work is done or has definitely stopped. If you
 started something that is still running (a release, a deploy, a test suite, CI,

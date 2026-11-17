@@ -217,7 +217,10 @@ func runPlanCheck(args []string, stdout, stderr io.Writer) int {
 // shape guard accepts them. Merge the ops into a plan apply request.
 func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		fmt.Fprintln(stderr, "usage: cmdr plan template "+strings.Join(beads.PlanTemplateNames(), "|")+" --parent ID --subject TEXT [--owner-go]")
+		fmt.Fprintln(stderr, "usage: cmdr plan template <name> --parent ID --subject TEXT [--owner-go]")
+		for _, n := range beads.PlanTemplateNames() {
+			fmt.Fprintf(stderr, "  %-22s %s\n", n, beads.PlanTemplateTitles[n])
+		}
 		return 2
 	}
 	name := args[0]
@@ -234,7 +237,7 @@ func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, e)
 		return 2
 	}
-	if e = json.NewEncoder(stdout).Encode(map[string]any{"ops": ops}); e != nil {
+	if e = json.NewEncoder(stdout).Encode(map[string]any{"template": name, "title": beads.PlanTemplateTitles[name], "ops": ops}); e != nil {
 		return 1
 	}
 	return 0

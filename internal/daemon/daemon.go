@@ -454,15 +454,20 @@ func New() (*Daemon, error) {
 		// key + role->name mapping as everything else; the `am` CLI is refused
 		// while the server runs and "commander" is not an am project slug.
 		pl = inbox.NewPoller(&serverInbox{server: amServer, roles: st, key: commanderRepo}, commanderRepo, commanderAgent, inboxInterval)
-		settle.mail = routedRoleMail(managers, st, amServer, commanderRepo, "cmdrd", "high")
-		watch.mail = settle.mail
-		health.alert = healthAlert(routedRoleMail(managers, st, amServer, commanderRepo, "cmdrd", "urgent"))
+		// Agent mail to the Commander and Managers is retired (notice.go).
+		var wakeAgent func(ctx context.Context, role, text string) error
+		if chatEngine != nil {
+			wakeAgent = chatEngine.Send
+		}
+		notice := cmdrdNotice(wakeAgent)
+		settle.mail = nil
+		watch.mail = nil
+		health.alert = healthLog
 		watch.degraded.mail = amServer
 		liveGates = &gateWatcher{
 			projects: st, beads: bd, gh: runGH, run: gates.RunShell, repoOf: livedata.GitHubRepo, now: time.Now,
 			last: map[string]gateSeen{}, failing: map[string]int{},
 			degraded: func() bool { return live.LastLoadErr() != nil },
-			mail:     routedRoleMail(managers, st, amServer, commanderRepo, "commander", "high"),
 		}
 		waits = &waitWatcher{
 			projects: st, beads: reads, gh: runGH, repoOf: livedata.GitHubRepo, now: time.Now, woken: map[string]bool{},
@@ -478,7 +483,7 @@ func New() (*Daemon, error) {
 				}
 				return out, nil
 			},
-			mail: routedRoleMail(managers, st, amServer, commanderRepo, "commander", "high"),
+			mail: notice,
 		}
 		invariant = newInvariantWatcher(watch.latest, waits.mail)
 		pitch = newPitchWatcher(home, watch.latest, waits.mail)

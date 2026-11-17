@@ -155,15 +155,21 @@ func TestEventWaitWithNoAccessSaysSoOnce(t *testing.T) {
 	}
 }
 
-// Past its expect-by time the Commander hears once; the wait still holds.
+// Past its expect-by time the step shows a red row (no mail); the wait still holds.
 func TestEventWaitPastItsExpectByTellsTheCommanderOnce(t *testing.T) {
 	wt := beads.Wait{Kind: beads.WaitDeploy, Sha: "b91127b070", Since: cutoverOn, By: cutoverOn.Add(time.Hour)}
 	w, m, sent := memWatcher([]string{wt.Label()}, cutoverOn.Add(2*time.Hour))
 	w.gh = deployGH(t, false)
 	w.poll(context.Background())
 	w.poll(context.Background())
-	if len(*sent) != 1 || (*sent)[0].to != "commander" || !strings.HasPrefix((*sent)[0].subject, "[wait overdue]") {
-		t.Fatalf("mail: %+v", *sent)
+	rows := 0
+	for _, v := range w.InvalidState() {
+		if v.Rule == "wait-overdue" {
+			rows++
+		}
+	}
+	if len(*sent) != 0 || rows != 1 {
+		t.Fatalf("mail %+v, overdue rows %d: want a red row and no mail", *sent, rows)
 	}
 	if !slices.Contains(labelsOf(t, m), wt.Label()) {
 		t.Fatal("an overdue wait must keep holding until it happens or is changed")

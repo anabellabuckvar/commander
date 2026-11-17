@@ -15,16 +15,38 @@ type planStep struct {
 	after              []string
 }
 
+// prSteps are the PR flow both PR templates share up to the review.
+func prSteps(s string) []planStep {
+	return []planStep{
+		{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective,lane:agents"},
+		{ref: "green", title: s + " PR: get CI green and answer Devin (fix our failures; a red check from main is reported with its cause and owner)", labels: "kind:objective,lane:agents", after: []string{"build"}},
+		{ref: "check", title: "Review: the " + s + " PR (green, Devin-clean, matches the scope)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
+	}
+}
+
+// PlanTemplateTitles are the templates' display names, by slug.
+var PlanTemplateTitles = map[string]string{
+	"pr-babysit-fast":      "Ship a PR, fast (admin merge)",
+	"pr-babysit-slow":      "Ship a PR, with team review",
+	"pr-babysit":           "Ship a PR, fast (admin merge)",
+	"propose-then-approve": "Propose, approve, then build",
+	"investigation":        "Investigate and decide a fix",
+	"app-release":          "Release an app to prod",
+}
+
 var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
-	"pr-babysit": func(s string, _ bool) []planStep {
-		return []planStep{
-			{ref: "build", title: "Build " + s + " and open its PR (review skill once)", labels: "kind:objective,lane:agents"},
-			{ref: "green", title: s + " PR: get CI green and answer Devin (fix our failures; a red check from main is reported with its cause and owner)", labels: "kind:objective,lane:agents", after: []string{"build"}},
-			{ref: "check", title: "Review: the " + s + " PR (green, Devin-clean, matches the scope)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
-			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
-			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective,lane:agents", after: []string{"merge"}},
-			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
-		}
+	"pr-babysit-fast": func(s string, _ bool) []planStep {
+		return append(prSteps(s),
+			planStep{ref: "merge", title: "Greenlight: admin-merge the " + s + " PR (no team review)", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
+			planStep{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective,lane:agents", after: []string{"merge"}},
+		)
+	},
+	"pr-babysit-slow": func(s string, _ bool) []planStep {
+		return append(prSteps(s),
+			planStep{ref: "team", title: "The team approves the " + s + " PR on GitHub (wait pr:approved:#N once the PR is open)", labels: "kind:objective,lane:elsewhere:the team", after: []string{"check"}},
+			planStep{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"team", "check"}},
+			planStep{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works on a real event", labels: "kind:objective,lane:agents", after: []string{"merge"}},
+		)
 	},
 	"app-release": func(s string, ownerGo bool) []planStep {
 		steps := []planStep{
@@ -43,7 +65,6 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			planStep{ref: "deploy", title: "Release " + s + ": deploy to prod reusing the receipt (zero downtime, memory gate)", labels: "kind:objective,lane:agents,cmdr:release-deploy", after: []string{deployAfter}},
 			planStep{ref: "watch", title: "Release " + s + ": 15-minute prod watch, then post DEPLOYED", labels: "kind:objective,lane:agents", after: []string{"deploy"}},
 			planStep{ref: "mainline", title: "Release " + s + ": land the release on the app's mainline", labels: "kind:objective,lane:agents", after: []string{"watch"}},
-			planStep{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"mainline"}},
 		)
 	},
 	"propose-then-approve": func(s string, _ bool) []planStep {
@@ -56,7 +77,6 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			{ref: "check2", title: "Review: the " + s + " PR (green, Devin-clean, matches the approved proposal)", labels: "kind:objective,lane:agents,review", after: []string{"green"}},
 			{ref: "merge", title: "Greenlight: merge the " + s + " PR", labels: "kind:objective,gate,approver:user", after: []string{"check2"}},
 			{ref: "live", title: s + " live: wait on the deploy (--waiting deploy:<merge sha>, not a clock) and confirm it works", labels: "kind:objective,lane:agents", after: []string{"merge"}},
-			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"live"}},
 		}
 	},
 	"investigation": func(s string, _ bool) []planStep {
@@ -64,9 +84,13 @@ var planTemplates = map[string]func(subject string, ownerGo bool) []planStep{
 			{ref: "investigate", title: "Investigate " + s + ": reproduce and find the cause, with evidence", labels: "kind:objective,lane:agents"},
 			{ref: "check", title: "Review: the " + s + " findings (cause proven, evidence attached)", labels: "kind:objective,lane:agents,review", after: []string{"investigate"}},
 			{ref: "decide", title: "Decide the " + s + " fix: proposed change, size and risk", labels: "kind:objective,gate,approver:user", after: []string{"check"}},
-			{ref: "done", title: "Confirm done", labels: "kind:objective,gate,approver:user,closing-gate", after: []string{"decide"}},
 		}
 	},
+}
+
+func init() {
+	// pr-babysit is the old name of the fast PR template.
+	planTemplates["pr-babysit"] = planTemplates["pr-babysit-fast"]
 }
 
 // PlanTemplateNames lists the templates in a stable order.

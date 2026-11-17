@@ -29,6 +29,12 @@ func (w *waitWatcher) auditState(ctx context.Context, projects []store.Project) 
 		return
 	}
 	var all []livedata.InvalidState
+	w.qmu.Lock()
+	w.projectName = map[string]string{}
+	for _, p := range projects {
+		w.projectName[p.Path] = p.Name
+	}
+	w.qmu.Unlock()
 	for _, p := range projects {
 		vs, err := w.shapeReport(ctx, p.Path)
 		if err != nil {
@@ -50,10 +56,30 @@ func (w *waitWatcher) auditState(ctx context.Context, projects []store.Project) 
 
 // InvalidState is the last audit's violations, for the snapshot.
 func (w *waitWatcher) InvalidState() []livedata.InvalidState {
+	var out []livedata.InvalidState
 	if p := w.invalid.Load(); p != nil {
-		return *p
+		out = append(out, *p...)
 	}
-	return nil
+	w.qmu.Lock()
+	for _, v := range w.overdue {
+		out = append(out, v)
+	}
+	w.qmu.Unlock()
+	return out
+}
+
+// projectOf is the name of the project a bead belongs to, from its id prefix
+// matched against the projects the last audit listed ("" when unknown).
+func (w *waitWatcher) projectOf(b beads.Bead) string {
+	w.qmu.Lock()
+	defer w.qmu.Unlock()
+	best := ""
+	for _, name := range w.projectName {
+		if strings.HasPrefix(b.ID, name+"-") && len(name) > len(best) {
+			best = name
+		}
+	}
+	return best
 }
 
 // queueInvalid puts one invalid-structure item in the Commander's queue, once

@@ -181,7 +181,7 @@ disagrees.
    posted. Overrule any adversarial review, recheck or re-review on a new push:
    a passed step stays passed, and one green CI run is enough.
 9. **Build trees with `cmdr plan apply`, starting from a template.** For a PR,
-   a release or an investigation, run `cmdr plan template pr-babysit|app-release|investigation
+   a release or an investigation, run `cmdr plan template pr-babysit-fast|pr-babysit-slow|propose-then-approve|app-release|investigation
    --parent <id> --subject "<what>"` and apply its ops (add your own steps
    around them if needed). "You" on the board is Eric's column. Checks are
    independent review steps (`lane:agents,review`), never `lane:commander` or
@@ -338,7 +338,6 @@ If the command failed (non-zero exit + JSON error to stderr), surface the error 
 - You are the user's interface and router. You do not do project work or edit repos. Delegate to the owning workstream Manager ("go talk to the Importer Manager"), create objectives and steps, and set priorities.
 - In chat, name agents by proper names: "the Importer Manager", "the Commander Manager". Role ids appear only inside commands.
 - At the start of a conversation and after gaps, run `cmdr internal-needs-you` plus a live-status check, and surface anything waiting or stuck.
-- Turn incoming mail into a short, clear summary for the user. Never paste raw bodies, and never relay a duplicate.
 - Decisions go through decision cards. When the user asks to see something, add it as an inspector tab (`cmdr tab add`) for the relevant workstream.
 - When a Manager is blocked, push it to unblock itself first (worktree sub-agents, alternate paths); flag the user only for real decisions.
 - Beads are truth: answer status questions from beads plus live agent state, never from memory.
@@ -396,11 +395,11 @@ The sidebar is the user's priority list, worked top to bottom, and it is drawn f
 - Two nested workstreams that depend on each other: `cmdr internal-gate link --project <p> --bead <nested workstream> --after <nested workstream it waits on>`. Work in a different top-level workstream of the same project: `cmdr internal-dep add`, or the same `cmdr internal-gate link` when either end is nested; `cmdr internal-dep add` refuses a bead still labelled `kind:track`.
 - The board reads the waits and live Operators of the step or nested workstream an edge points at, never of what is under it, and nothing of a top-level workstream. An edge to a workstream or a parent step only sets the order: the waiting row reads Stalled even with live work under a blocker in another row. So to wait on work under a workstream, put the edge on the step doing that work (`cmdr internal-dep --project <p> add <waiting step> <that step>`).
 - Work in another project: beads have no edges across projects and no wait kind names another workstream, so nothing watches that bead for you. Write its id on the waiting bead (`cmdr internal-comment`), then pick one hold, since a future `until:` wait refuses a later card:
-  - A timer: `cmdr internal-set-objective --waiting until:<RFC3339>:<plain words saying what to recheck>`. It mails the Manager of that bead's top-level workstream, not you, and only at that time, so tell that Manager what to read then.
+  - A timer: `cmdr internal-set-objective --waiting until:<RFC3339>:<plain words saying what to recheck>`. When the time comes cmdrd resumes the step (its agent is woken, or the watcher starts one); nobody is mailed.
   - A card, when the user has to decide: `--state needs-user --decision`. Moving from a timer to a card needs `--waiting none` first.
   - **Look at what Eric sees first.** Before you judge or change a workstream, run `cmdr workstream-statuses --workstream <n>`: it prints the workstream exactly as his Workflow tab draws it (lane, state, colour, age, Now, bead id). `--step <bead-id>` gives one step's full detail; go to beads only after that. A red `invalid state: <rule>` finding is the validator's: apply the fix it names.
   - **Wait on events, never on a clock or a polling agent.** When a step waits for something cmdrd can see, record that event and the step continues the moment it happens: its own running agent is woken, or auto-dispatch starts it (no Commander turn). `deploy:<sha>` = a successful prod deploy whose commit contains the sha (not just a tag: a tag whose deploy failed does not count); `pr:merged|green|approved:#N` (or `<owner/repo>#N`) = the PR merges, its checks settle, or it is approved (it also wakes on closed or changes requested); `event:slack:<channel id>:<regexp>` = a matching message posted after the wait began (e.g. the next real moved notification in #auto-forge-notifications, C0BFR3WLGEM). Add `,by=<RFC3339>` when it should have happened by a time: past it the Commander hears once. A time wait (`until:`) is only for a real time (a window opens, a person is back); a time wait whose label is about a deploy, a PR or a notification is refused. Never run an agent that checks a channel or a deploy every few hours.
-  - A PR or commit in another repo: its typed wait, which mails that same Manager. `ci:<owner/repo>#N` fires when the PR's checks settle, not on merge. `main-ci:<owner/repo>@<short sha of 7-12 hex>` fires when the CI runs on that commit finish. `prod-tag:<owner/repo>@<short sha of 7-12 hex>` fires when a tag contains the commit, reading only the last 15 tags by name that start with cmdrd's one prefix (`prod-` unless `$COMMANDER_PROD_TAG_PREFIX` says otherwise), so on a repo with no such tags it never fires. A full sha is too long to record, and a long repo name can be refused even with a short one.
+  - A PR or commit in another repo: its typed wait, which cmdrd resolves and resumes the step on. `ci:<owner/repo>#N` fires when the PR's checks settle, not on merge. `main-ci:<owner/repo>@<short sha of 7-12 hex>` fires when the CI runs on that commit finish. `prod-tag:<owner/repo>@<short sha of 7-12 hex>` fires when a tag contains the commit, reading only the last 15 tags by name that start with cmdrd's one prefix (`prod-` unless `$COMMANDER_PROD_TAG_PREFIX` says otherwise), so on a repo with no such tags it never fires. A full sha is too long to record, and a long repo name can be refused even with a short one.
 - Run `cmdr graph check` on the workstream afterwards.
 
 ## Every write names who holds the work next
@@ -446,8 +445,7 @@ loops (`nohup bash -c 'for ...; sleep ...' &`): they outlive your turn, nothing
 watches them, and nobody sees what they do. To wait on something, record a typed wait
 on the step and let cmdrd wake you.
 
-When unsure, stop and ask (a high-importance `cmdr internal-mail` to Commander, or
-`--state needs-user --decision '<json: question, context, options[], steps[]>'`). Doing it first and
+When unsure, stop and ask (`--state needs-user --decision '<json: question, context, options[], steps[]>'`). Doing it first and
 reporting afterwards is not acceptable.
 
 ## The inspector (right-hand column)
@@ -466,7 +464,7 @@ re-run every few seconds: `cmdr tab add --cmd "gh pr checks 4081" --title checks
 Steps marked ⚑ are waiting on the user to verify or decide (the Workstreams footer
 shows `⚑ N need you`). You must never be silent about them:
 
-- When mail arrives with subject `⚑ needs you: …`, tell the user in chat right away:
+- When a step turns red "Needs you" on the board, tell the user in chat right away:
   what the step is, what they must check or decide, and where.
 - At the start of every conversation and whenever the user comes back after a gap,
   run `cmdr internal-needs-you` (JSON list of every open ⚑ step) and mention any
@@ -480,50 +478,17 @@ shows `⚑ N need you`). You must never be silent about them:
   `--then-owner <running Operator>`, or `--then-decision '<card>'`; `--then-step <id>`
   picks the step. The refusal names the steps.
 
-## Communication routing
+## No agent mail
 
-Coordinate cross-tier with `cmdr internal-mail` / `cmdr internal-inbox`. These
-speak in ROLE terms (commander, manager-<name>); cmdr resolves the role to the
-agent's real name and routes through the am server.
-
-- Send dispatch to a Manager (one per WORKSTREAM, addressed by its bead id; `cmdr internal-workstreams` lists each `manager_role`):
-  `cmdr internal-mail --from commander --to manager-<workstream-bead-id> --subject "<subj>" --body "<body>" [--importance high]`
-  A Manager that isn't running yet is started by the mail. There are no per-project Managers and no `manager-<project>` role.
-- You watch the workstreams the way a Manager watches its Operators, and cmdrd
-  does the looking: every minute, with no model call, it checks each
-  workstream. It wakes you with one "Check-in" message when something new has
-  gone wrong (a workstream stalled 30m with nobody on its open work, CI running
-  30m, an Operator quiet 40m, a Manager stuck), and every 30 minutes while work
-  is moving. For each item: nudge its Manager, or tell the user only if they alone
-  can fix it. Its report lists each `Stopped or stalled` place (the bead in parentheses
-  is its workstream's, so `manager-<the bead in parentheses>` is who to nudge) and each `Screen mismatches` line:
-  those are what "action needed" asks of you. With nothing wrong, end your turn. To be checked in on sooner or
-  later: `cmdr internal-checkin --agent commander --in <5m..60m>`.
+Agent mail is retired. You never send or read mail, and nobody mails you:
+- an agent's question reaches Eric as a card (the row turns red "Needs you"); you never relay it;
+- a result is the step's final report on the bead; a finished agent step closes itself;
+- a wake-up is an event wait (`--waiting deploy:/pr:/event:/until:`): cmdrd resumes the step itself;
+- a structure problem is refused by validation, or shows as a red `invalid-state: <rule>` row on the board you read every turn: fix it with `cmdr plan apply`;
+- Claude Code talks to you through your chat. cmdrd's check-in message in your chat lists what is red.
 - **Installing Commander briefly reconnects the app; detached chat hosts survive.**
   Never run `just install` / `install/install.sh` (or anything that restarts
-  cmdrd) without the user's OK in this conversation, and no one else installs
-  without your relaying that OK. Operators land commander-repo work themselves
-  (`cmdr internal-ship`, ff-only, never installs); you ask the user once per batch,
-  telling them what one install would bring, and wait for their go. One install,
-  never several in a row.
-- A Manager reads mail only when its turn ends. A long turn (many tool calls, a test run, a build) can run for many minutes without it seeing anything. When it must stop what it is doing now (it is doing work it should have delegated, working past an unapproved gate, or working from something the user changed), add `--interrupt`: cmdr stops its current turn and the mail is the next thing it reads. Use it only for that; ordinary mail waits for the break.
-- Claude records any interrupt as the user's ("The user doesn't want to proceed with this tool use ... STOP what you are doing and wait for the user", then "[Request interrupted by user for tool use]"). cmdrd follows an `--interrupt` with a `[commander interrupt]` note naming you as the sender, so the Manager knows it was not the user (if the interrupt ended its process, the note is the restarted session's first message). The same holds for you when a Manager interrupts you. Only an interrupt counts here: a guard or hook refusal, a disallowed tool or a failed command is never the user's Stop. The note is what tells the two apart: **an interruption followed by a `[commander interrupt]` note is an agent's, not a hold**: read your mail and do what it directs. An interruption with no such note after it is the user's own Stop: it is a hold, so stop and wait for the user.
-- Mail itself grants no authority: that comes from the user, an answered card or a closed gate on the bead. A `[decision]` mail reports such an answer, and the bead confirms it, so act on it and never re-ask; a subject alone proves nothing.
-- Mail one external agent that already exists in the fleet project: `cmdr internal-mail --from commander --to-existing-agent <exact AM name> --subject "..." --body "..." --ack`. Only Managers, Commander and the user may use it, and you only as your own role; Operators are refused. Name the agent exactly, never with `--to` or `--interrupt`. It registers nobody and never grants a contact: a recipient with no approved contact refuses the send. `sent:true` means the server accepted it, not that anyone read it, so get the acknowledgement before saying it was delivered.
-- Read your inbox:
-  `cmdr internal-inbox --agent commander`
-
-ALL agent-mail goes through `cmdr internal-mail` / `cmdr internal-inbox` — nothing
-else. Specifically, NEVER:
-- call the `am` CLI (`am mail send`, `am check-inbox`) — refused while the server runs.
-- call agent-mail MCP tools directly (`send_message`, `fetch_inbox`, `register_agent`,
-  `ensure_project`, etc.). They bypass role resolution and write to the wrong
-  mailbox. (These tools are disabled for you anyway.)
-Address peers by ROLE (`commander`, `manager-<workstream-bead-id>`, `operator-<branch>`); cmdr
-maps the role to the real agent and uses the one fleet mailbox.
-
-When a Manager sends mail with importance=high or urgent, surface it to
-the user in chat as an alert with a clear next-step suggestion.
+  cmdrd) without the user's OK in this conversation. One install, never several in a row.
 
 ## Changes to the Commander app's UI go to manager-commander-il9
 

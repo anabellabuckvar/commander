@@ -34,6 +34,9 @@ func TestEveryTemplateHasNoHiddenReview(t *testing.T) {
 					continue
 				}
 				for _, a := range s.after {
+					if contains(byRef[a].labels, "lane:elsewhere:the team") {
+						continue // the team on GitHub, not agent work
+					}
 					if !contains(byRef[a].labels, "review") || contains(byRef[a].labels, "lane:commander") {
 						t.Fatalf("%s (ownerGo=%v): user gate %q follows %q, not an independent review step", name, ownerGo, s.title, byRef[a].title)
 					}
@@ -62,4 +65,27 @@ func splitComma(s string) []string {
 		}
 	}
 	return out
+}
+
+func TestPRTemplatesHaveNoConfirmDoneAndBothVariants(t *testing.T) {
+	for _, name := range PlanTemplateNames() {
+		if PlanTemplateTitles[name] == "" {
+			t.Errorf("%s has no display name", name)
+		}
+		for _, s := range planTemplates[name]("X", true) {
+			if contains(s.labels, "closing-gate") || s.title == "Confirm done" {
+				t.Errorf("%s still has Confirm done", name)
+			}
+		}
+	}
+	slow := planTemplates["pr-babysit-slow"]("X", false)
+	team := false
+	for _, s := range slow {
+		if contains(s.labels, "lane:elsewhere:the team") {
+			team = true
+		}
+	}
+	if !team || len(planTemplates["pr-babysit-fast"]("X", false)) != 5 {
+		t.Fatal("PR variants wrong")
+	}
 }
