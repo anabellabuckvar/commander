@@ -160,10 +160,20 @@ func TestManagerCloseWaitIsASettleMarker(t *testing.T) {
 // mid-word before that drops the stub. Either way it is cleared by its label.
 func TestCutTimeWaitReadsAtAWord(t *testing.T) {
 	since, until := time.Unix(1893491158, 0), time.Unix(1893499200, 0)
-	w := Wait{Kind: WaitUntil, Since: since, Until: until, Ref: "the slow pages safety review finishes its second pass"}
+	ref := "the slow pages safety review finishes its second pass and then the release train is rebuilt on dev six"
+	w := Wait{Kind: WaitUntil, Since: since, Until: until, Ref: ref}
+	if l := w.Label(); len(l) > MaxLabelLen {
+		t.Fatalf("label %q is %d long, over %d", l, len(l), MaxLabelLen)
+	}
 	got, ok := ParseWaitLabel(w.Label())
-	if !ok || !got.Cut || got.Text() != "the slow pages safety…" {
-		t.Fatalf("cut wait: %+v reads %q", got, got.Text())
+	text := got.Text()
+	if !ok || !got.Cut || !strings.HasSuffix(text, "…") || !strings.HasPrefix(ref, strings.TrimSuffix(text, "…")+" ") {
+		t.Fatalf("cut wait: %+v reads %q", got, text)
+	}
+	// A label that fits the 100-character cap is stored whole.
+	whole, _ := ParseWaitLabel(Wait{Kind: WaitUntil, Since: since, Until: until, Ref: "the slow pages safety review finishes its second pass"}.Label())
+	if whole.Cut || whole.Text() != "the slow pages safety review finishes its second pass" {
+		t.Fatalf("a label under the cap was cut: %q", whole.Text())
 	}
 	if got.Label() != w.Label() {
 		t.Fatalf("label %q does not round trip: %q", w.Label(), got.Label())
@@ -204,7 +214,7 @@ func TestLongUntilLabelKeepsWholeWordsAndParsesTyped(t *testing.T) {
 }
 
 func TestUntilLabelThatCannotFitTwoWordsIsRefused(t *testing.T) {
-	_, err := ParseWait("until:2026-11-10T10:00:00Z:Commander's-extraordinarily-long-first-word rest")
+	_, err := ParseWait("until:2026-11-10T10:00:00Z:Commander's-extraordinarily-long-first-word-that-goes-on-and-on-past-the-hundred-character-label-cap rest")
 	if err == nil || !strings.Contains(err.Error(), "too long") {
 		t.Fatalf("want a too-long refusal, got %v", err)
 	}

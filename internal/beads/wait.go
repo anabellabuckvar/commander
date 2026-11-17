@@ -285,8 +285,13 @@ func (w Wait) Label() string {
 	return w.compactLabel()
 }
 
-// MaxLabelLen is br's limit on a label; a longer one is refused on write.
-const MaxLabelLen = 50
+// MaxLabelLen is the longest label Commander writes (labels are jsonb in
+// Postgres; the old br store's 50-character limit no longer applies).
+const MaxLabelLen = 100
+
+// legacyMaxLabelLen was the label limit before Nov 17: a compact time-wait
+// label written then at its full length may have been cut by characters.
+const legacyMaxLabelLen = 50
 
 // longBody is the part of the long form after waiting:<since>:.
 func (w Wait) longBody() string {
@@ -377,7 +382,7 @@ func ParseWaitLabel(label string) (Wait, bool) {
 	if c, ok := strings.CutPrefix(label, compactWaitPrefix); ok {
 		w, ok := parseCompactWait(c)
 		// A trailing space marks a cut label; older cuts filled the label to its limit.
-		if ok && w.Kind == WaitUntil && w.Ref != "" && (strings.HasSuffix(w.Ref, " ") || len(label) >= MaxLabelLen-2) {
+		if ok && w.Kind == WaitUntil && w.Ref != "" && (strings.HasSuffix(w.Ref, " ") || len(label) >= MaxLabelLen-2 || (len(label) >= legacyMaxLabelLen-2 && len(label) <= legacyMaxLabelLen)) {
 			w.Cut = true
 		}
 		return w, ok
