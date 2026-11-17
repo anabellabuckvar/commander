@@ -224,6 +224,13 @@ func runInternalSetObjective(args []string, stdout, stderr *os.File) int {
 				*note = strings.TrimSpace(d.Question + "\n" + d.Context)
 			}
 		}
+		// A card on a parked step never reaches NEEDS YOU: refuse it, so nobody
+		// tells the user a card is waiting that the sidebar will never show.
+		if (decisionJSON != "" || *state == beads.StateNeedsUser) && *status == "" {
+			if cur, err := beads.FreshShow(ctx, bc, dir, *beadID); err == nil && cur != nil && cur.Status == beads.StatusDeferred {
+				return result, fmt.Errorf("%s is parked, so a card on it never reaches the user's NEEDS YOU and nothing would show. Unpark it first (cmdr internal-set-objective --project %s --bead %s --unpark), or if it is an item you created by mistake, supersede it yourself instead of asking", *beadID, *projectName, *beadID)
+			}
+		}
 		// A review or merge card waits for green CI on the PRs it names.
 		if decision != nil && (*state == beads.StateNeedsUser || *state == "") {
 			if why := strings.TrimSpace(*checksNotGreen); why != "" {
