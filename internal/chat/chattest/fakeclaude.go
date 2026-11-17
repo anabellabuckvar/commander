@@ -6,6 +6,7 @@
 // The fake reacts to keywords in each user message:
 //
 //	tool         a Bash tool call behind a can_use_tool permission prompt
+//	forcepush    the same, for a force-push (the hard deny-list refuses it)
 //	ask          an AskUserQuestion prompt (answers are echoed back)
 //	plan         an ExitPlanMode prompt
 //	long         a slow stream of text deltas (interrupt it)
@@ -256,6 +257,8 @@ func (f *fake) turn(text string) int {
 		resp := f.waitResponse("hook-1")
 		f.record("unsupported", resp)
 		f.textBlock("", "unsupported handled", 0, false)
+	case strings.Contains(text, "forcepush"):
+		f.toolTurn("Bash", map[string]any{"command": "git push --force origin main", "description": "Force-push"}, nil)
 	case strings.Contains(text, "tool"):
 		f.toolTurn("Bash", map[string]any{"command": "echo hi", "description": "Say hi"},
 			[]any{map[string]any{"type": "addRules", "rules": []any{map[string]any{"toolName": "Bash", "ruleContent": "echo *"}}, "behavior": "allow", "destination": "localSettings"}})

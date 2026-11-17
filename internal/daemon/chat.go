@@ -34,6 +34,10 @@ func newChatEngine(home string, st *store.Store) *chat.Engine {
 		Tmux:          layout.DefaultRunner{},
 		AllowHandover: os.Getenv(HandoverEnvVar) == "1",
 		CrashRestart:  restartsOnCrash,
+		// Nothing the Commander or an Operator runs waits on an approval prompt;
+		// any prompt left for the user is declined after its timeout.
+		AutoAnswer:    chat.AutoAnswered,
+		PromptTimeout: chat.DefaultPromptTimeout,
 		Logf:          log.Printf,
 	})
 }

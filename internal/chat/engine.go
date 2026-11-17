@@ -89,8 +89,17 @@ type Options struct {
 	CrashRestart func(role string) bool
 	// CrashRestartDelay is the pause before that restart; default 2s.
 	CrashRestartDelay time.Duration
-	Now               func() time.Time
-	Logf              func(format string, args ...any)
+	// AutoAnswer picks the roles whose tool permission prompts cmdrd answers
+	// itself, at once: allowed, unless the hard deny-list (internal/harddeny)
+	// refuses the command. Nothing such a role runs waits on an approval.
+	// Questions (AskUserQuestion) and plans (ExitPlanMode) still go to the user.
+	// nil answers none.
+	AutoAnswer func(role string) bool
+	// PromptTimeout is how long a prompt left for the user may wait before
+	// cmdrd declines it, so no chat stays frozen on one; zero (or nil) never.
+	PromptTimeout func(role string) time.Duration
+	Now           func() time.Time
+	Logf          func(format string, args ...any)
 }
 
 // Engine owns the headless Claude processes, one per role.
@@ -1010,11 +1019,15 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 		return
 	}
 	events, cr := p.norm.Line(line)
+	var auto *ControlRequest // answered by cmdrd once the request is published
 	if cr != nil && !answered[cr.RequestID] {
-		if cr.Subtype == "can_use_tool" {
+		if cr.Subtype == "can_use_tool" && !silent && e.autoAnswers(c.role, cr) {
+			auto = cr
+		} else if cr.Subtype == "can_use_tool" {
 			p.pmu.Lock()
 			p.pending[cr.RequestID] = cr
 			p.pmu.Unlock()
+			e.armPromptTimeout(c, p, cr)
 		} else if !silent {
 			_ = p.write(map[string]any{"type": "control_response", "response": map[string]any{
 				"subtype": "error", "request_id": cr.RequestID, "error": "unsupported by commander: " + cr.Subtype}})
@@ -1046,6 +1059,9 @@ func (e *Engine) handleLine(c *chatRole, p *process, line []byte, silent bool, a
 	}
 	if !c.publishFrom(p, events...) {
 		return
+	}
+	if auto != nil {
+		e.answerAuto(c, p, auto)
 	}
 	for _, ev := range events {
 		if ev.Kind == KindCompaction {
