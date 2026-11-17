@@ -733,6 +733,13 @@ var eventTimer = regexp.MustCompile(`(?i)\b(deploy|deploys|deployed|deployment|m
 // timeWindow: a scheduled window ("the deploy window opens") is a real time.
 var timeWindow = regexp.MustCompile(`(?i)\b(deploy|deployment|release|maintenance|change|merge) (window|freeze)\b`)
 
+// userTimer: a time wait whose label is the user's own action ("you send the
+// channel ids"): the user's move is a card, never a clock.
+var userTimer = regexp.MustCompile(`(?i)^\s*(you|eric)\b`)
+
+// UserTimerLabel: label names something the user does.
+func UserTimerLabel(label string) bool { return userTimer.MatchString(label) }
+
 func EventTimerLabel(label string) bool {
 	return eventTimer.MatchString(label) && !timeWindow.MatchString(label)
 }

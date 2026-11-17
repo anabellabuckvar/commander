@@ -333,7 +333,7 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 		}
 		// n. every step has an owner: lane:agents, lane:you (or a user gate),
 		// lane:elsewhere[:who], or a typed wait. Nothing defaults to the Commander.
-		if !n.gate() && !n.container() && len(t.children[n.ID]) == 0 && n.prefixed("lane:") == "" && !n.waiting() && !n.has("kind:gate") && !n.has("kind:task") {
+		if !n.gate() && !n.container() && len(t.children[n.ID]) == 0 && !n.ownerTagged() && !n.waiting() && !n.has("kind:gate") && !n.has("kind:task") {
 			add(ShapeViolation{Rule: "no-owner-tag", Beads: []string{n.ID},
 				Why: fmt.Sprintf("%q has no owner tag, so the board cannot say whose move it is", n.Title),
 				Fix: fmt.Sprintf("label %s lane:agents (an agent runs it), lane:you (Eric does it), or lane:elsewhere:<who> (someone outside)", n.ID)})
@@ -425,6 +425,11 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 					Why: fmt.Sprintf("%q carries a wait label cmdrd cannot read (%s), so nothing will ever release it", n.Title, l),
 					Fix: fmt.Sprintf("replace it with a typed wait: cmdr internal-set-objective --bead %s --waiting <kind>:<ref>", n.ID)})
 				continue
+			}
+			if !n.closed() && w.Kind == WaitUntil && UserTimerLabel(w.Ref) {
+				add(ShapeViolation{Rule: "time-wait-for-user", Beads: []string{n.ID},
+					Why: fmt.Sprintf("%q waits on a clock for %q, something the user does, with no card for them", n.Title, w.Ref),
+					Fix: fmt.Sprintf("put it on the user's list: cmdr internal-set-objective --bead %s --waiting none --state needs-user --decision '{question, context, input: true}'", n.ID)})
 			}
 			if !n.closed() && w.Kind == WaitUntil && EventTimerLabel(w.Ref) {
 				add(ShapeViolation{Rule: "time-wait-for-event", Beads: []string{n.ID},
@@ -538,6 +543,10 @@ func (n *ShapeNode) reviewStep() bool {
 	if n.gate() {
 		return n.prefixed("approver:") == "commander"
 	}
+	// "review" is also an old Operator task's state label: a task is never a review step.
+	if n.has("kind:task") || n.has("kind:gate") {
+		return false
+	}
 	return n.prefixed("lane:") == "commander" || n.has("review") || reviewTitle.MatchString(n.Title)
 }
 
@@ -621,4 +630,10 @@ func idBefore(a, b string) bool {
 // container: a workstream or track bead, which holds steps.
 func (n *ShapeNode) container() bool {
 	return n.has("kind:workstream") || n.has("kind:track")
+}
+
+// ownerTagged: a label says whose step it is: a lane, the user's card
+// (needs-user), an agent runtime or a named owner.
+func (n *ShapeNode) ownerTagged() bool {
+	return n.prefixed("lane:") != "" || n.has("needs-user") || n.prefixed("runtime:") != "" || n.prefixed("owner:") != ""
 }

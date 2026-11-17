@@ -122,7 +122,7 @@
     "for_you": false
    },
    "tracks": [],
-   "why": "Automation failure: open work has no valid holder. Owner: manager-docs-g. Next: inspect current evidence and record the next guarded recovery action on app-g.1.3. Commander owns escalation if recovery fails."
+   "why": "Automation failure: open work has no valid holder. Owner: manager-docs-g. Next: inspect current evidence and record the next guarded recovery action on app-g.1.3."
   },
   {
    "key": "example-docs:docs-o",

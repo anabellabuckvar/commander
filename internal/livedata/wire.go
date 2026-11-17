@@ -111,7 +111,8 @@ func (s *Source) Last() (Data, bool) {
 		if d, ok := s.Recent(recentFresh); ok {
 			return d, true
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		// A real load of the largest project takes 3-7 s on a busy VM.
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		data, _ := s.Current(ctx)
 		return data, true

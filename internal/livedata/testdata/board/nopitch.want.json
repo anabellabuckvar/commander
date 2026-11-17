@@ -109,7 +109,7 @@
     "for_you": false
    },
    "tracks": [],
-   "why": "Automation failure: Invalid state: no card written yet for greenlight merging the sample list test fix. Owner: manager-w3. Next: inspect current evidence and record the next guarded recovery action on w3. Commander owns escalation if recovery fails."
+   "why": "Automation failure: Invalid state: no card written yet for greenlight merging the sample list test fix. Owner: manager-w3. Next: inspect current evidence and record the next guarded recovery action on w3."
   },
   {
    "key": "p:w4",

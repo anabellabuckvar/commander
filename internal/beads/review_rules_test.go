@@ -57,3 +57,11 @@ func TestOwnerAndReviewRules(t *testing.T) {
 		t.Fatalf("%v", r)
 	}
 }
+
+// An old Operator task carries "review" as its state label: never a review step.
+func TestReviewLabelOnATaskIsNotAReviewStep(t *testing.T) {
+	task := step("W.1.3", "W.1", "Batch ship: six ready branches, one verify", "kind:task", "review")
+	if vs := ShapeCheck([]ShapeNode{ws("W"), track("W.1", "W", "T"), task}); rulesOf(vs)["review-without-work"] != 0 {
+		t.Fatalf("%+v", vs)
+	}
+}

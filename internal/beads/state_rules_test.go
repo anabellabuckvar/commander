@@ -51,3 +51,16 @@ func TestStateAgentClosingTheUsersGate(t *testing.T) {
 		t.Fatalf("the user's own click refused: %+v", vs)
 	}
 }
+
+// 3.4 on Nov 17: the agent's question became "Waiting on you send the alert
+// Slack channel ids (Nov 18)": a clock for the user's move, with no card.
+func TestStateTimeWaitForTheUser(t *testing.T) {
+	w := Wait{Kind: WaitUntil, Since: time.Unix(1_800_000_000, 0), Until: time.Unix(1_800_090_000, 0), Ref: "you send the alert Slack channel ids"}
+	s := step("W.1.10", "W.1", "Grafana alerting live", "lane:agents", w.Label())
+	if r := rulesOf(ShapeCheck([]ShapeNode{ws("W"), track("W.1", "W", "Alerting"), s})); r["time-wait-for-user"] != 1 {
+		t.Fatalf("%v", r)
+	}
+	if UserTimerLabel("the 6 AM quiet window opens") {
+		t.Fatal("a real time flagged")
+	}
+}

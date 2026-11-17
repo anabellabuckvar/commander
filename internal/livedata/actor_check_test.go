@@ -69,3 +69,21 @@ func TestActorMismatchIsARedFinding(t *testing.T) {
 		t.Fatal("a structure item may name the Commander")
 	}
 }
+
+// 596t.15.8 on Nov 17: a review's "Final report: SEND BACK" closed it. A review
+// closes itself only when its report says it passed.
+func TestReviewSendBackIsNotClean(t *testing.T) {
+	line := "Final report: SEND BACK — the revised five-case proposal largely resolves the original review"
+	if CleanReport(line) {
+		t.Fatal("send back read as clean")
+	}
+	rev := SnapStep{BeadID: "r", Title: "Review: the proposed test cases", Lane: "agents", Status: "open", ResultRunID: 1, ResultReadyAt: 10, ResultLine: "Final report: the cases look fine"}
+	b := board{s: Snapshot{}}
+	if n := b.actorBead("p", 1, "commander", rev); n.ResultClean {
+		t.Fatal("a review without PASS closed itself")
+	}
+	rev.ResultLine = "Final report: PASS — every case checked"
+	if n := b.actorBead("p", 1, "commander", rev); !n.ResultClean {
+		t.Fatal("a passing review did not close")
+	}
+}

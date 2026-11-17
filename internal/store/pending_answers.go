@@ -10,6 +10,8 @@ type PendingAnswer struct {
 	Project string
 	Bead    string
 	Action  string
+	Choice  string
+	Text    string
 }
 
 // PendingAnswers lists the user's recorded answers whose step has not taken
@@ -30,9 +32,9 @@ WHERE r.state IN(0,1) AND commander_pending_human_answer(r.project_id,r.bead_id)
 		if err := rows.Scan(&a.Project, &a.Bead, &payload); err != nil {
 			return nil, err
 		}
-		var r struct{ Action string }
+		var r struct{ Action, Choice, Text string }
 		_ = json.Unmarshal([]byte(payload), &r)
-		a.Action = r.Action
+		a.Action, a.Choice, a.Text = r.Action, r.Choice, r.Text
 		if a.Action == "" {
 			a.Action = "approve"
 		}

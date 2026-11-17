@@ -220,6 +220,9 @@ func checkWaitLabels(added []string, beadLabels func() ([]string, bool)) error {
 			if beads.ReviewTimerLabel(w.Ref) {
 				return fmt.Errorf("wait until:...:%q: a timer standing in for a PR review leaves the review unseen until it fires. cmdrd watches reviews itself: --waiting review:<login> with --review <N>", w.Ref)
 			}
+			if beads.UserTimerLabel(w.Ref) {
+				return fmt.Errorf("wait until:...:%q: a clock standing in for something the user does leaves the step waiting with no card, so the user never sees it. The user's move is a card: --state needs-user with --decision", w.Ref)
+			}
 			if beads.EventTimerLabel(w.Ref) {
 				return fmt.Errorf("wait until:...:%q: a clock time standing in for a deploy, PR or notification leaves the step idle after it happens. cmdrd watches these itself and the step continues the moment it happens: --waiting deploy:<sha> (a successful prod deploy containing the commit), pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (a matching message after now), each optionally with ,by=<RFC3339>", w.Ref)
 			}

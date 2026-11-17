@@ -78,8 +78,10 @@ func (d *Daemon) runAutoAccept(ctx context.Context) {
 		if d.attempted == nil {
 			d.attempted = &answerTries{}
 		}
-		applyAnswers(ctx, d.store.PendingAnswers, d.attempted)
-		if acceptResults(ctx, d.store.AgentResultsToAccept, d.tryClose) > 0 {
+		raiseQuestionCards(ctx, d.store.QuestionsWithoutCards, cmdrCommand)
+		applyAnswers(ctx, d.store.PendingAnswers, d.attempted, d.answerQuestion)
+		closed := closeAnsweredGates(ctx, d.store.AnsweredGates, d.tryClose)
+		if acceptResults(ctx, d.store.AgentResultsToAccept, d.tryClose)+closed > 0 {
 			d.store.NotifyStateChanged(ctx)
 			d.autoDispatchOnce(ctx)
 		}
@@ -101,7 +103,7 @@ type answerTries struct {
 // applyAnswers finishes every recorded answer of the user's that its step has
 // not taken yet, through the same command the Commander used to run:
 // applying the user's own answer needs no one's judgment.
-func applyAnswers(ctx context.Context, list func(context.Context) ([]store.PendingAnswer, error), tries *answerTries) {
+func applyAnswers(ctx context.Context, list func(context.Context) ([]store.PendingAnswer, error), tries *answerTries, answerQuestion func(context.Context, store.PendingAnswer)) {
 	answers, err := list(ctx)
 	if err != nil || len(answers) == 0 {
 		return
@@ -124,6 +126,9 @@ func applyAnswers(ctx context.Context, list func(context.Context) ([]store.Pendi
 		tries.mu.Unlock()
 		if recent {
 			continue
+		}
+		if answerQuestion != nil {
+			answerQuestion(ctx, a)
 		}
 		c, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		cmd := exec.CommandContext(c, cmdr, "internal-resolve-needs", "--project", a.Project, "--bead", a.Bead, "--action", a.Action, "--resume-only")
@@ -157,4 +162,22 @@ func (d *Daemon) tryClose(ctx context.Context, project, bead, reason string) err
 		return fmt.Errorf("retried at most every ten minutes")
 	}
 	return closeWithReason(ctx, project, bead, reason)
+}
+
+// answerQuestion hands the user's answer to the agent whose blocking question
+// the card carried, as the step's planning owner, which resumes the agent.
+func (d *Daemon) answerQuestion(ctx context.Context, a store.PendingAnswer) {
+	id, owner, err := d.store.PendingQuestionOn(ctx, a.Project, a.Bead)
+	if err != nil || id == "" || owner == "" {
+		return
+	}
+	text := answerText(a.Choice, a.Text)
+	if text == "" {
+		return
+	}
+	if _, err := d.store.AnswerQuestion(ctx, id, owner, "The user answered: "+text, true); err != nil {
+		log.Printf("question-answer: %s %s: %v", a.Project, a.Bead, err)
+		return
+	}
+	log.Printf("question-answer: %s %s: the user's answer went to the agent", a.Project, a.Bead)
 }

@@ -24,7 +24,9 @@ func (s *Store) AgentResultsToAccept(ctx context.Context) ([]AcceptCandidate, er
 FROM bead_tasks b JOIN projects p ON p.id=b.project_id
 WHERE b.deleted_at IS NULL AND b.status IN('open','in_progress') AND b.result_ready_at>0 AND b.result_run_id IS NOT NULL
  AND lower(ltrim(b.result_summary)) LIKE 'final report%'
- AND ltrim(b.result_summary) !~* '^final report\W*(blocked|blocker|failed|fail\M|cannot|could not|unable|not done|incomplete|stopped|aborted|partial)'
+ AND ltrim(b.result_summary) !~* '^final report\W*(blocked|blocker|failed|fail\M|cannot|could not|unable|not done|incomplete|stopped|aborted|partial|send back|sent back|sending back|changes requested|(need|needs) (correction|changes|fixes|work)|not ready|reject)'
+ AND (NOT (jsonb_exists(b.labels,'review') OR jsonb_exists(b.labels,'lane:commander') OR b.title ~* '^\s*(review\M|independent review|commander (check|checks)\M)')
+      OR split_part(ltrim(b.result_summary),chr(10),1) ~* '\m(pass|passed|approved)\M')
  AND NOT jsonb_exists(b.labels,'gate') AND NOT jsonb_exists(b.labels,'kind:workstream') AND NOT jsonb_exists(b.labels,'hold')
  AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(b.labels) l WHERE l='lane:you' OR l LIKE 'lane:elsewhere%' OR l LIKE 'approver:%' OR l='closing-gate')
  AND NOT EXISTS(SELECT 1 FROM bead_tasks c WHERE c.project_id=b.project_id AND c.parent_id=b.id AND c.deleted_at IS NULL AND c.status<>'closed' AND NOT jsonb_exists(c.labels,'kind:task'))

@@ -50,9 +50,15 @@ func (b board) addActorChecks(ws SnapWorkstream, r *BoardRow) {
 				Why: "the line reads \"" + l.text + "\", naming the Commander, but its step is not a Commander step",
 				Fix: "cmdrd derives the line from the step's owner tag; mail Commander this finding if the step's tag is wrong"})
 		}
-		if l.actor != nil && strings.HasPrefix(l.actor.Lead.Reason, nextactor.InvalidPrefix) && !seen["i"+bead] {
+		blocked := l.actor != nil && strings.TrimPrefix(l.actor.Lead.Reason, "blocked:") == "agent_blocked"
+		if l.actor != nil && (strings.HasPrefix(l.actor.Lead.Reason, nextactor.InvalidPrefix) || blocked) && !seen["i"+bead] {
 			seen["i"+bead] = true
 			rule := strings.TrimPrefix(l.actor.Lead.Reason, nextactor.InvalidPrefix)
+			if blocked {
+				// A step that ended blocked (a review that sends work back) needs
+				// a new step: the Commander's to structure.
+				rule = "blocked-result"
+			}
 			r.Diagram.Findings = append(r.Diagram.Findings, DiagramFinding{Check: CheckInvalidState + rule, Bead: bead, Title: plainTitle(l.title),
 				Why: l.actor.Lead.Text, Fix: invalidFix(rule, bead)})
 		}
@@ -65,6 +71,8 @@ func invalidFix(rule, bead string) string {
 		return "put the step's question on Eric's list (cmdr internal-set-objective --bead " + bead + " with the ask), or retag it lane:agents if an agent does it"
 	case "no-open-step":
 		return "plan the track's next step with cmdr plan apply, or close the track if it is finished"
+	case "blocked-result":
+		return "add the step that fixes what the report names (and a review after it), or supersede " + bead + " if the work is no longer wanted"
 	case "no-brief":
 		return "give " + bead + " a description (what to do) and acceptance (what counts as done) so an agent can start"
 	}

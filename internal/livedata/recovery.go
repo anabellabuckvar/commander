@@ -54,9 +54,9 @@ func recoveryLine(l line, ws SnapWorkstream) line {
 		cause = "open work has no valid holder"
 	}
 	if cause == "Stuck" {
-		cause = "Manager cannot accept its queued work"
+		cause = "its queued work cannot be accepted"
 	}
-	detail := "Automation failure: " + cause + ". Owner: " + owner + ". Next: " + action + " on " + target + ". Commander owns escalation if recovery fails."
+	detail := "Automation failure: " + cause + ". Owner: " + owner + ". Next: " + action + " on " + target + "."
 	if l.why != "" && !strings.Contains(l.why, "Automation failure:") {
 		detail = l.why + " · " + detail
 	}

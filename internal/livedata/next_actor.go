@@ -163,7 +163,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	n.Lane, n.Container, n.NoBrief = s.Lane, s.Track || len(s.Children) > 0, s.NoBrief
 	n.Gate, n.Answered = s.Gate || s.ClosingGate, s.Answered
 	n.ReviewStep = IsReviewStep(s)
-	n.ResultLine, n.ResultClean = s.ResultLine, CleanReport(s.ResultLine)
+	n.ResultLine, n.ResultClean = s.ResultLine, CleanReport(s.ResultLine) && (!n.ReviewStep || passLine.MatchString(s.ResultLine))
 	if b.needsIDs[s.BeadID] {
 		n.NeedsUser, n.UserAsk = true, b.askText(project, s)
 	} else if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
@@ -281,7 +281,10 @@ func IsReviewStep(s SnapStep) bool {
 	return !s.Gate && (s.Lane == "commander" || reviewTitle.MatchString(s.Title))
 }
 
-var blockedReport = regexp.MustCompile(`(?i)^\s*final report\W*(blocked|blocker|failed|fail\b|cannot|could not|unable|not done|incomplete|stopped|aborted|partial)`)
+// passLine: a review's report must say it passed to close itself.
+var passLine = regexp.MustCompile(`(?i)\b(pass|passed|approved)\b`)
+
+var blockedReport = regexp.MustCompile(`(?i)^\s*final report\W*(blocked|blocker|failed|fail\b|cannot|could not|unable|not done|incomplete|stopped|aborted|partial|send back|sent back|sending back|changes requested|needs? (correction|changes|fixes|work)|not ready|reject)`)
 
 // CleanReport: a result line that is a final report and does not say the
 // work is blocked or failed. A clean final report closes its step.
