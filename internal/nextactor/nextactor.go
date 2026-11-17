@@ -64,6 +64,9 @@ type Bead struct {
 	ReviewStep bool
 	// NoBrief: no description or acceptance, so no agent can be started on it.
 	NoBrief bool
+	// Gate: a gate (approved, never run by an agent); Answered: the user
+	// answered its card and turning the answer into steps is owed.
+	Gate, Answered bool
 	// ResultClean: the result is a clean final report, which closes the step
 	// itself; ResultLine is its first line.
 	ResultClean bool
@@ -285,6 +288,10 @@ func decide(b Bead, ctx Context, seen map[string]bool, depth int) Result {
 // the board shows it red and the Commander fixes the beads.
 const InvalidPrefix = "invalid:"
 
+// StructurePrefix starts the reason of the Commander's one kind of move: turning
+// the user's answer into bead structure.
+const StructurePrefix = "structure:"
+
 // unowned is an open step nothing else settles: its owner tag says who moves.
 // An agent step is queued for an agent (cmdrd starts one); anything else with
 // no move is an invalid state, never a made-up Commander line.
@@ -294,6 +301,10 @@ func unowned(b Bead) Result {
 	switch {
 	case b.Stopped:
 		r.Actor, r.Reason, r.Text = Stuck, "agent_stopped", "Stopped: the agent on "+quoted(b.Title)+" was stopped"
+	case b.Gate && b.Answered:
+		r.Actor, r.Reason, r.Text = Commander, StructurePrefix+"answer", "Commander: turn your answer on "+quoted(b.Title)+" into steps"
+	case b.Gate:
+		r.Actor, r.Reason, r.Text = Stuck, InvalidPrefix+"no-card", "Invalid state: the gate "+quoted(b.Title)+" has no card for you"
 	case b.Container:
 		r.Actor, r.Reason, r.Text = Stuck, InvalidPrefix+"no-open-step", "Invalid state: nothing open under "+quoted(b.Title)
 	case lane == "you":

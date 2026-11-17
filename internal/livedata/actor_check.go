@@ -17,7 +17,7 @@ func lineMismatch(line string, lead *nextactor.Row) bool {
 	if !namesCommander(line) {
 		return false
 	}
-	if lead != nil && (lead.Lead.Actor == nextactor.Commander || strings.HasPrefix(lead.Lead.Reason, nextactor.InvalidPrefix)) {
+	if lead != nil && (lead.Lead.Actor == nextactor.Commander || strings.HasPrefix(lead.Lead.Reason, nextactor.InvalidPrefix) || strings.HasPrefix(lead.Lead.Reason, nextactor.StructurePrefix)) {
 		return false
 	}
 	return true

@@ -96,6 +96,8 @@ func TestDecideCoversEveryFactCombination(t *testing.T) {
 		{"no brief is invalid", open(func(b *Bead) { b.NoBrief = true }), true, 0, Stuck, "invalid:no-brief", "Invalid state:"},
 		{"a track with nothing open is invalid", open(func(b *Bead) { b.Container = true }), true, 0, Stuck, "invalid:no-open-step", "Invalid state:"},
 		{"Eric's step with no card is invalid", open(func(b *Bead) { b.Lane = "you" }), true, 0, Stuck, "invalid:no-card", "Invalid state:"},
+		{"an answered gate is the Commander's to structure", open(func(b *Bead) { b.Gate, b.Answered = true, true }), true, 0, Commander, "structure:answer", "Commander: turn your answer"},
+		{"a gate with no card is invalid, never an agent's", open(func(b *Bead) { b.Gate = true }), true, 0, Stuck, "invalid:no-card", "Invalid state:"},
 		{"nothing recorded for an hour, Commander busy elsewhere", open(func(b *Bead) { b.ProgressAt = ago(time.Hour) }), true, 0, Agent, "ready", "Queued for an agent"},
 		{"nothing recorded, Commander idle long", open(func(b *Bead) {}), false, time.Hour, Agent, "ready", "Queued for an agent"},
 	}

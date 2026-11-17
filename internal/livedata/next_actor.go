@@ -161,6 +161,7 @@ func (b board) actorBead(project string, pid int64, commander string, s SnapStep
 	n.MergeWait = b.s.MergeHeld[project+"\x00"+s.BeadID]
 	n.CardsKnown = true
 	n.Lane, n.Container, n.NoBrief = s.Lane, s.Track || len(s.Children) > 0, s.NoBrief
+	n.Gate, n.Answered = s.Gate || s.ClosingGate, s.Answered
 	n.ReviewStep = IsReviewStep(s)
 	n.ResultLine, n.ResultClean = s.ResultLine, CleanReport(s.ResultLine)
 	if b.needsIDs[s.BeadID] {

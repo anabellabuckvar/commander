@@ -69,7 +69,7 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 
 func dispatchable(s livedata.SnapStep, byID map[string]livedata.SnapStep) bool {
 	if s.Status != "open" || s.Superseded || s.Withdrawn || s.Hold || s.Gate || s.ClosingGate || s.Track || s.Task ||
-		s.ExecutionReady || s.ExecutionMode != "active" || s.PlanningPending || s.ResultReadyAt > 0 || s.QuestionWaiting ||
+		s.ExecutionReady || s.ExecutionMode != "active" || s.ResultReadyAt > 0 || s.QuestionWaiting ||
 		s.HumanAnswerPending || s.State == "needs-user" || s.OwnerState == "working" ||
 		s.NoBrief || (s.Lane != "" && s.Lane != "agents" && s.Lane != "commander") { // a person's task (lane you or elsewhere) is never an agent's
 		return false
