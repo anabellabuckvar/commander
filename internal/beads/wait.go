@@ -20,6 +20,12 @@ import (
 //	waiting:<unix since>:prod-tag:owner:repo:<sha>
 //	waiting:<unix since>:review:<login>        a requested reviewer
 //	waiting:<unix since>:until:<unix target>:<label>   a time; <label> is EscapeLabel'd (may be empty)
+//	waiting:<unix since>:deploy:<sha>          a successful prod deploy whose commit contains <sha>
+//	waiting:<unix since>:deploy:owner:repo:<sha>
+//	waiting:<unix since>:pr:<merged|green|approved>:<N>   PR #N reaches that state (or settles otherwise)
+//	waiting:<unix since>:pr:<cond>:owner:repo:<N>
+//	waiting:<unix since>:event:<slack|notify>:<channel>:<pattern>   a matching message after <since>; <pattern> is a regexp, EscapeLabel'd with ":" escaped too
+//	any deploy, pr or event wait may end in :by<unix>: if nothing happened by then, cmdrd tells the Commander once
 //	waiting:<unix since>:user
 //	waiting:<unix since>:operator:<role>
 //
@@ -38,6 +44,24 @@ const (
 	WaitUser     = "user"
 	WaitOperator = "operator"
 	WaitUntil    = "until"
+	// WaitDeploy, WaitPR and WaitEvent are event waits: cmdrd resolves them itself
+	// (GitHub, Slack) and the step continues the moment they happen.
+	WaitDeploy = "deploy"
+	WaitPR     = "pr"
+	WaitEvent  = "event"
+)
+
+// PR wait conditions.
+const (
+	PRMerged   = "merged"
+	PRGreen    = "green"
+	PRApproved = "approved"
+)
+
+// Event wait sources.
+const (
+	EventSlack  = "slack"
+	EventNotify = "notify"
 )
 
 // ManagerCloseWait labels the time wait cmdrd puts on a step whose Operator
@@ -121,6 +145,18 @@ type Wait struct {
 	Checked time.Time
 	// Cut: an until wait's label was cut to fit MaxLabelLen; Text marks it.
 	Cut bool
+	// Cond is a pr wait's condition (merged, green, approved) or an event wait's source (slack, notify).
+	Cond string
+	// Channel is an event wait's channel (a Slack channel id, or a Notify kind for notify).
+	Channel string
+	// By is when a deploy, pr or event wait was expected to have happened (zero = no expectation).
+	By time.Time
+}
+
+// IsEventWait reports a wait cmdrd resolves from the outside world itself:
+// when it happens, the step continues without anyone's turn.
+func (w Wait) IsEventWait() bool {
+	return w.Kind == WaitDeploy || w.Kind == WaitPR || w.Kind == WaitEvent
 }
 
 // CheckedLabel is the label recording a poll at t.
@@ -193,10 +229,57 @@ func parseRepoSha(arg, ref string) (repo, sha string, err error) {
 // main-ci:<owner/repo>@<sha>, prod-tag:<sha> (same forms), review:<login>,
 // user, operator:<role>, until:<RFC3339>[:label]. Since is left zero.
 func ParseWait(arg string) (Wait, error) {
-	kind, ref, _ := strings.Cut(strings.TrimSpace(arg), ":")
+	arg = strings.TrimSpace(arg)
+	var by time.Time
+	if i := strings.LastIndex(arg, ",by="); i > 0 {
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(arg[i+4:]))
+		if err != nil {
+			return Wait{}, fmt.Errorf("--waiting %q: ,by= wants an RFC3339 time", arg)
+		}
+		by, arg = t, arg[:i]
+	}
+	kind, ref, _ := strings.Cut(arg, ":")
 	kind = ownercompat.Normalize(kind)
 	w := Wait{Kind: kind}
+	if !by.IsZero() && kind != WaitDeploy && kind != WaitPR && kind != WaitEvent {
+		return w, fmt.Errorf("--waiting %q: ,by= is only for deploy, pr and event waits", arg)
+	}
+	w.By = by
 	switch kind {
+	case WaitDeploy:
+		repo, sha, err := parseRepoSha(arg, ref)
+		if err != nil {
+			return w, err
+		}
+		w.Repo, w.Sha = repo, sha
+	case WaitPR:
+		cond, rest, _ := strings.Cut(ref, ":")
+		if cond != PRMerged && cond != PRGreen && cond != PRApproved {
+			return w, fmt.Errorf("--waiting %q: want pr:<merged|green|approved>:#N or pr:<cond>:<owner/repo>#N", arg)
+		}
+		repo, num, ok := strings.Cut(rest, "#")
+		n, err := strconv.Atoi(num)
+		if !ok || err != nil || n <= 0 {
+			return w, fmt.Errorf("--waiting %q: want pr:<merged|green|approved>:#N or pr:<cond>:<owner/repo>#N", arg)
+		}
+		if repo != "" && (strings.Count(repo, "/") != 1 || strings.ContainsAny(repo, ". :")) {
+			return w, fmt.Errorf("--waiting %q: repo must be owner/name without dots", arg)
+		}
+		w.Cond, w.Repo, w.PR = cond, repo, n
+	case WaitEvent:
+		parts := strings.SplitN(ref, ":", 3)
+		if len(parts) != 3 || (parts[0] != EventSlack && parts[0] != EventNotify) || parts[1] == "" || waitRefUnsafe.MatchString(parts[1]) || strings.TrimSpace(parts[2]) == "" {
+			return w, fmt.Errorf("--waiting %q: want event:slack:<channel id>:<regexp> or event:notify:<kind>:<regexp>", arg)
+		}
+		if _, err := regexp.Compile(parts[2]); err != nil {
+			return w, fmt.Errorf("--waiting %q: the pattern is not a valid regexp: %v", arg, err)
+		}
+		w.Cond, w.Channel, w.Ref = parts[0], parts[1], parts[2]
+		w.Since = time.Now()
+		if l := w.longLabel(); len(l) > MaxLabelLen {
+			return w, fmt.Errorf("--waiting %q: the pattern is too long to store (labels are limited to %d characters); use a shorter regexp", arg, MaxLabelLen)
+		}
+		w.Since = time.Time{}
 	case WaitCI:
 		repo, num, ok := strings.Cut(ref, "#")
 		n, err := strconv.Atoi(num)
@@ -243,7 +326,7 @@ func ParseWait(arg string) (Wait, error) {
 			return w, err
 		}
 	default:
-		return w, fmt.Errorf("--waiting %q: kind must be ci, main-ci, prod-tag, review, user, operator or until", arg)
+		return w, fmt.Errorf("--waiting %q: kind must be ci, main-ci, prod-tag, deploy, pr, event, review, user, operator or until", arg)
 	}
 	return w, nil
 }
@@ -314,6 +397,22 @@ func (w Wait) longBody() string {
 		if w.Ref != "" {
 			body += ":" + EscapeLabel(w.Ref)
 		}
+	case WaitDeploy:
+		if w.Repo != "" {
+			body += ":" + strings.Replace(w.Repo, "/", ":", 1)
+		}
+		body += ":" + w.Sha
+	case WaitPR:
+		body += ":" + w.Cond
+		if w.Repo != "" {
+			body += ":" + strings.Replace(w.Repo, "/", ":", 1)
+		}
+		body += ":" + strconv.Itoa(w.PR)
+	case WaitEvent:
+		body += ":" + w.Cond + ":" + w.Channel + ":" + strings.ReplaceAll(EscapeLabel(w.Ref), ":", "_3a")
+	}
+	if w.IsEventWait() && !w.By.IsZero() {
+		body += ":by" + strconv.FormatInt(w.By.Unix(), 10)
 	}
 	return body
 }
@@ -328,7 +427,7 @@ func (w Wait) longLabel() string {
 // "operator-", a time wait's label cut to fit.
 const compactWaitPrefix = "w:"
 
-var waitKindCode = map[string]string{WaitCI: "ci", WaitMainCI: "mc", WaitProdTag: "pt", WaitReview: "rv", WaitUser: "us", WaitOperator: "op", WaitUntil: "un"}
+var waitKindCode = map[string]string{WaitCI: "ci", WaitMainCI: "mc", WaitProdTag: "pt", WaitReview: "rv", WaitUser: "us", WaitOperator: "op", WaitUntil: "un", WaitDeploy: "dp", WaitPR: "pr", WaitEvent: "ev"}
 
 func (w Wait) compactLabel() string {
 	head := compactWaitPrefix + strconv.FormatInt(w.Since.Unix(), 36) + ":" + waitKindCode[w.Kind]
@@ -398,7 +497,40 @@ func ParseWaitLabel(label string) (Wait, bool) {
 	}
 	parts := strings.Split(body, ":")
 	w := Wait{Kind: ownercompat.Normalize(parts[0]), Since: time.Unix(secs, 0)}
+	if w.IsEventWait() && len(parts) > 2 {
+		if by, ok := strings.CutPrefix(parts[len(parts)-1], "by"); ok {
+			if t, err := strconv.ParseInt(by, 10, 64); err == nil {
+				w.By = time.Unix(t, 0)
+				parts = parts[:len(parts)-1]
+			}
+		}
+	}
 	switch w.Kind {
+	case WaitDeploy:
+		if (len(parts) != 2 && len(parts) != 4) || !waitShaRe.MatchString(parts[len(parts)-1]) {
+			return Wait{}, false
+		}
+		w.Sha = parts[len(parts)-1]
+		if len(parts) == 4 {
+			w.Repo = parts[1] + "/" + parts[2]
+		}
+	case WaitPR:
+		if len(parts) != 3 && len(parts) != 5 {
+			return Wait{}, false
+		}
+		n, err := strconv.Atoi(parts[len(parts)-1])
+		if err != nil || (parts[1] != PRMerged && parts[1] != PRGreen && parts[1] != PRApproved) {
+			return Wait{}, false
+		}
+		w.Cond, w.PR = parts[1], n
+		if len(parts) == 5 {
+			w.Repo = parts[2] + "/" + parts[3]
+		}
+	case WaitEvent:
+		if len(parts) != 4 || (parts[1] != EventSlack && parts[1] != EventNotify) {
+			return Wait{}, false
+		}
+		w.Cond, w.Channel, w.Ref = parts[1], parts[2], UnescapeLabel(parts[3])
 	case WaitUntil:
 		if len(parts) < 2 {
 			return Wait{}, false
@@ -484,6 +616,16 @@ func (w Wait) Text() string {
 			return "time"
 		}
 		return w.RefText()
+	case WaitDeploy:
+		return "prod deploy with " + shortSha(w.Sha)
+	case WaitPR:
+		pr := fmt.Sprintf("PR #%d", w.PR)
+		if w.Repo != "" {
+			pr = fmt.Sprintf("PR %s#%d", w.Repo, w.PR)
+		}
+		return pr + " " + w.Cond
+	case WaitEvent:
+		return fmt.Sprintf("%s event in %s matching %q", w.Cond, w.Channel, w.Ref)
 	}
 	return w.Ref
 }
@@ -582,3 +724,10 @@ var reviewTimer = regexp.MustCompile(`(?i)\b(review|reviews|reviewed|reviewer|re
 // ReviewTimerLabel reports a time wait's label that is about a PR's review or
 // approval: cmdrd watches reviews itself, so a timer standing in for one is wrong.
 func ReviewTimerLabel(label string) bool { return reviewTimer.MatchString(label) }
+
+var eventTimer = regexp.MustCompile(`(?i)\b(deploy|deploys|deployed|deployment|merged|merges|pull request|notification|notifications)\b|\bpr\b.*\b(green|merge|merged|ci)\b|\b(alert|notification)s? (fires|fired|arrives|posts)\b`)
+
+// EventTimerLabel reports a time wait's label that stands in for an event cmdrd
+// can watch itself (a prod deploy, a PR, a notification): it must be a deploy,
+// pr or event wait, so the step continues the moment it happens, not at a clock time.
+func EventTimerLabel(label string) bool { return eventTimer.MatchString(label) }
