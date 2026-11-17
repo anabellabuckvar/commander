@@ -213,7 +213,10 @@ func settleCutoverExit(ctx context.Context, q Querier, pid int64, bead string, r
 		if reason != "" {
 			why += ": " + reason
 		}
-		_, e = q.ExecContext(ctx, `UPDATE bead_tasks SET execution_ready=FALSE,resume_run_id=NULL,resume_plan_revision=0,execution_error=?,responsible_agent_id=commander_supervisor(project_id,id) WHERE project_id=? AND id=? AND active_run_id=?`, truncateSupervision(why, 1000), pid, bead, rid)
+		// The stopped agent's "Final report" (often written before cmdrd had to
+		// force the stop) is its save-and-stop note, not a result to review:
+		// the step waits for re-planning.
+		_, e = q.ExecContext(ctx, `UPDATE bead_tasks SET execution_ready=FALSE,resume_run_id=NULL,resume_plan_revision=0,execution_error=?,responsible_agent_id=commander_supervisor(project_id,id),result_ready_at=CASE WHEN result_run_id=? THEN 0 ELSE result_ready_at END,result_summary=CASE WHEN result_run_id=? THEN '' ELSE result_summary END,result_run_id=CASE WHEN result_run_id=? THEN NULL ELSE result_run_id END WHERE project_id=? AND id=? AND active_run_id=?`, truncateSupervision(why, 1000), rid, rid, rid, pid, bead, rid)
 		return e == nil, e
 	}
 	result, e := q.ExecContext(ctx, `UPDATE bead_tasks b SET status='open',execution_ready=TRUE,resume_run_id=?,resume_plan_revision=b.plan_revision,execution_attempts=0,execution_due_at=0,execution_error='' WHERE b.project_id=? AND b.id=? AND b.active_run_id=? AND b.status IN('open','in_progress') AND b.result_run_id IS NULL AND btrim(b.description)<>'' AND btrim(b.acceptance_criteria)<>''`, rid, pid, bead, rid)

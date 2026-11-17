@@ -152,3 +152,31 @@ func TestPostgresExitWithoutCutoverIsAResult(t *testing.T) {
 		t.Fatalf("result: %v %v", result, e)
 	}
 }
+
+// Release 2b on Nov 17: the Commander asked run 4940 to stop at 03:06, the
+// agent posted "Final report: STOPPED" at once (recorded as the step's result
+// while the run was still active), and cmdrd forced the stop at 03:16. The step
+// then read "commander to review the finished result" for 12 hours.
+func TestPostgresStopNoteBeforeAForcedStopIsNotAResult(t *testing.T) {
+	s, pid, ctx := executionFixture(t)
+	_, run, rid := cutoverRun(t, s, pid, ctx, "codex")
+	if got, e := s.RequestExecutionCutover(ctx, pid, "leaf", "", "re-planning release 2b", "commander"); e != nil || got != rid {
+		t.Fatalf("stop: %d %v", got, e)
+	}
+	var accepted bool
+	if e := s.DB().QueryRowContext(ctx, `SELECT commander_report_result(?,?,?,?,?)`, pid, "leaf", rid, run.OpencodeSessionID, "Final report: STOPPED, nothing deployed.").Scan(&accepted); e != nil || !accepted {
+		t.Fatalf("stop note before exit: %v %v", accepted, e)
+	}
+	if e := s.FinishNativeExecutionExit(ctx, run.AgentName, rid, run.OpencodeSessionID, "native-error", "", "signal terminated"); e != nil {
+		t.Fatal(e)
+	}
+	var why string
+	var result sql.NullInt64
+	var readyAt int64
+	if e := s.DB().QueryRowContext(ctx, `SELECT execution_error,result_run_id,result_ready_at FROM bead_tasks WHERE project_id=? AND id='leaf'`, pid).Scan(&why, &result, &readyAt); e != nil {
+		t.Fatal(e)
+	}
+	if result.Valid || readyAt != 0 || !strings.HasPrefix(why, StoppedByCommander) {
+		t.Fatalf("after a forced stop: result=%v ready_at=%d why=%q, want no result and the step stopped", result, readyAt, why)
+	}
+}
