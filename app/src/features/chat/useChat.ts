@@ -23,7 +23,7 @@ export interface Earlier {
   load(): void
 }
 
-export function useChat(role: string, transport: ChatTransport, opts: { holdWhileDown?: boolean; lastSeq?: number; screen?: (role: string) => string; capture?: ChatHost['capture'] } = {}) {
+export function useChat(role: string, transport: ChatTransport, opts: { holdWhileDown?: boolean; lastSeq?: number; screen?: (role: string) => string | Promise<string>; capture?: ChatHost['capture'] } = {}) {
   const [state, setState] = useState<ChatState>(() => initialState())
   // The chat opens with its recent history only. Everything applied since is
   // kept, so a page of older events can be folded in underneath it.
@@ -135,7 +135,8 @@ export function useChat(role: string, transport: ChatTransport, opts: { holdWhil
       const go = async () => {
         // The page capture waits at most its own timeout; without it the message goes out as it is.
         const cap = opts.noCapture || cap0 === null ? null : await captureRef.current?.take(role, cap0).catch(() => null)
-        const screen = [screenRef.current?.(role) ?? '', cap?.note ?? ''].filter(Boolean).join('\n')
+        const own = await Promise.resolve(screenRef.current?.(role) ?? '').catch(() => '')
+        const screen = [own, cap?.note ?? ''].filter(Boolean).join('\n')
         const files = cap ? [...(opts.attachments ?? []), ...cap.attachments] : opts.attachments
         return guard(
           transport.send(role, { text: withScreen(screen, text), clientId, attachments: files, now: opts.now }).then((r) => {

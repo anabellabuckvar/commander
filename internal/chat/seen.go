@@ -151,9 +151,9 @@ func seenTurns(raw []byte) []seenTurn {
 	return turns
 }
 
-// userScreen is the app's <user-screen> block, which rides along with a
-// message to the agent; the user sees only what they typed (app screen.ts).
-var userScreen = regexp.MustCompile(`^\s*<user-screen>[\s\S]*?</user-screen>\s*`)
+// userScreen is the block the app sends ahead of a message (workstream
+// statuses, or the older <user-screen>); the user sees only what they typed.
+var userScreen = regexp.MustCompile(`^\s*(<user-screen>[\s\S]*?</user-screen>|<workstream-statuses\b[\s\S]*?</workstream-statuses>)\s*`)
 
 func renderSeen(turns []seenTurn) string {
 	if len(turns) == 0 {

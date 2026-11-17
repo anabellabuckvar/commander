@@ -4,10 +4,13 @@
 
 const OPEN = '<user-screen>'
 const CLOSE = '</user-screen>'
-const BLOCK = /^<user-screen>[\s\S]*?<\/user-screen>\s*/
+const BLOCK = /^(<user-screen>[\s\S]*?<\/user-screen>|<workstream-statuses\b[\s\S]*?<\/workstream-statuses>)\s*/
 
 export function withScreen(screen: string, text: string): string {
-  return screen ? `${OPEN}\n${screen}\n${CLOSE}\n\n${text}` : text
+  if (!screen) return text
+  // Workstream statuses are their own tagged block; anything else rides in <user-screen>.
+  if (screen.startsWith('<workstream-statuses')) return `${screen}\n\n${text}`
+  return `${OPEN}\n${screen}\n${CLOSE}\n\n${text}`
 }
 
 export function stripScreen(text: string): string {

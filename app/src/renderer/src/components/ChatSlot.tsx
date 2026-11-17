@@ -13,7 +13,6 @@ import { ChatWatching } from './ChatWatching'
 import { MailChip } from './MailChip'
 import { hasConnections } from '../../../features/inspector'
 import { typing } from '../mailHold'
-import { captureHost } from '../pageCapture'
 import { screenContext } from '../screen'
 import { chatBackend, refreshChats, useChatPoll, type ChatStatus, type ChatVerb } from '../chatApi'
 import { switchTargets, type SwitchTarget } from '../providers'
@@ -72,8 +71,8 @@ const chatHost: ChatHost = {
     return role
   },
   Graph: ChatGraph,
+  // Workstream statuses ride along with each message; no page capture or screenshots.
   screen: screenContext,
-  capture: captureHost,
   Watching: ChatWatching,
   MailChip,
   // Above the input: an ask's choices.

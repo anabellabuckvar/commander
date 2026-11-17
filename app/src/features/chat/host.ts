@@ -23,7 +23,7 @@ export interface ChatHost {
   // Draws a ```cmdr-graph block once its JSON is complete.
   Graph?: ComponentType<{ spec: unknown }>
   // What the user sees right now, sent ahead of each of his messages to this role.
-  screen?(role: string): string
+  screen?(role: string): string | Promise<string>
   // The page the user is looking at, attached to a message when he sends it.
   capture?: {
     // What would ride along with a message to role now (null = nothing); a hook.
