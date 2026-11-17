@@ -222,8 +222,11 @@ func postgresRun(ctx context.Context, dir string, args []string) ([]byte, []byte
 			if e = pgCheckAutomaticGateResult(ctx, q, pid, dir); e != nil {
 				return e
 			}
-			out, e = pgWrite(ctx, q, pid, args)
-			return e
+			return pgShapeGuard(ctx, q, pid, [][]string{args}, func() ([]string, error) {
+				var we error
+				out, we = pgWrite(ctx, q, pid, args)
+				return []string{string(out)}, we
+			})
 		})
 	})
 	return out, nil, e
@@ -673,30 +676,39 @@ func postgresApplyOps(ctx context.Context, dir string, ops [][]string) DoorRespo
 			}
 			aliases := map[string]string{}
 			writeCtx := context.WithValue(ctx, postgresReaderKey{}, q)
-			for _, op := range ops {
-				ref := ""
-				if record {
-					var err error
-					op, ref, err = resolvePlanOperation(op, aliases)
-					if err != nil {
-						return err
-					}
-					if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
-						if err = validator(writeCtx, [][]string{op}); err != nil {
-							return err
+			if err := pgShapeGuard(ctx, q, pid, ops, func() ([]string, error) {
+				for _, op := range ops {
+					ref := ""
+					if record {
+						var err error
+						op, ref, err = resolvePlanOperation(op, aliases)
+						if err != nil {
+							return nil, err
+						}
+						if validator, ok := ctx.Value(planValidatorKey{}).(PlanValidator); ok {
+							if err = validator(writeCtx, [][]string{op}); err != nil {
+								return nil, err
+							}
 						}
 					}
+					out, e := pgWrite(writeCtx, q, pid, op)
+					if e != nil {
+						return nil, e
+					}
+					if ref != "" {
+						aliases[ref] = strings.TrimSpace(string(out))
+					}
+					if len(out) > 0 {
+						outputs = append(outputs, string(out))
+					}
 				}
-				out, e := pgWrite(writeCtx, q, pid, op)
-				if e != nil {
-					return e
+				seen := append([]string(nil), outputs...)
+				for _, id := range aliases {
+					seen = append(seen, id)
 				}
-				if ref != "" {
-					aliases[ref] = strings.TrimSpace(string(out))
-				}
-				if len(out) > 0 {
-					outputs = append(outputs, string(out))
-				}
+				return seen, nil
+			}); err != nil {
+				return err
 			}
 			response = DoorResponse{Stdout: strings.Join(outputs, "\n"), Applied: len(ops), Atomic: true}
 			if len(aliases) > 0 {
