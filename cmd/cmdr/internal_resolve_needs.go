@@ -34,6 +34,7 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 	revision := fs.Int64("revision", 0, "the displayed planning revision being answered")
 	resume := fs.Bool("resume-only", false, "only finish an already saved answer")
 	text := fs.String("text", "", "with --action decide: the user's free-text answer")
+	relayed := fs.String("relayed", "", "when an agent records an answer the user gave in chat: when they said it and their exact words (stored on the step as provenance)")
 	if err := fs.Parse(args); err != nil {
 		emitErr(stderr, fmt.Sprintf("parse flags: %v", err))
 		return 1
@@ -324,6 +325,18 @@ func runInternalResolveNeeds(args []string, stdout, stderr *os.File) int {
 			}
 			if current != r.Generation || (r.State >= store.ResolutionBeadWritten && (b == nil || (b.Status != "open" && b.Status != "in_progress") || !answered || slices.Contains(b.Labels, beads.NeedsUserLabel) || slices.ContainsFunc(b.Labels, ownercompat.IsLegacyNeeds))) {
 				return result, st.AdvanceNeedsResolution(ctx, *r, store.ResolutionSuperseded)
+			}
+		}
+		if closing && (b == nil || b.Status != "closed") && os.Getenv("COMMANDER_ROLE") != "" && b != nil && beads.IsClosingGate(b.Labels) {
+			// An agent relays the user's Confirm done from chat: it applies only with the user's words on record.
+			if strings.TrimSpace(*relayed) == "" && !*resume {
+				return result, fmt.Errorf("%s is a Confirm done step: relaying the user's confirmation from chat needs --relayed '<when they said it, and their exact words>'", *bead)
+			}
+			if strings.TrimSpace(*relayed) != "" {
+				note := fmt.Sprintf("Confirmed done by the user in chat, relayed by %s: %s", os.Getenv("COMMANDER_ROLE"), strings.TrimSpace(*relayed))
+				if err := bc.AddComment(ctx, dir, *bead, note); err != nil {
+					return result, fmt.Errorf("answer saved; the user's words could not be recorded, so the step stays open: %w", err)
+				}
 			}
 		}
 		if closing && (b == nil || b.Status != "closed") {

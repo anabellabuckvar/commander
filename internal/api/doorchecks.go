@@ -134,7 +134,10 @@ func refuseWorkstreamClose(ctx context.Context, bc beads.Client, dir, id string)
 		return fmt.Errorf("%s is a workstream and only the user marks a workstream done: put a card on it asking them to confirm it is done, and leave it open", id)
 	}
 	if beads.IsClosingGate(b.Labels) {
-		return fmt.Errorf("%s is its workstream's Confirm done step: only the user confirms it, on its card", id)
+		if b.HumanAnswerPending {
+			return nil // applying the user's own recorded answer (their click, or their words relayed with provenance)
+		}
+		return fmt.Errorf("%s is its workstream's Confirm done step: only the user confirms it, on its card, or by saying so in chat (record it with cmdr internal-resolve-needs --action approve --relayed '<when, and the user's exact words>')", id)
 	}
 	return nil
 }
