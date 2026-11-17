@@ -9,7 +9,10 @@ import (
 	"github.com/example-user/commander/internal/pgtest"
 )
 
-func TestOneFailedLiveStateReadIsRetriedBeforeReportingUnavailable(t *testing.T) {
+// Nov 17: reads hit their deadline under load and the app showed "Current
+// database state is unavailable" with an empty board. A failing read keeps the
+// last good board on screen, marked stale, for as long as it fails.
+func TestFailingLiveStateReadsKeepTheLastGoodBoardMarkedStale(t *testing.T) {
 	st, _ := pgtest.Open(t)
 	healthy := true
 	s := New(Options{Token: "t", StateStore: st, Source: func(context.Context) livedata.Snapshot {
@@ -26,10 +29,12 @@ func TestOneFailedLiveStateReadIsRetriedBeforeReportingUnavailable(t *testing.T)
 	if c := shown(); c.Degraded != nil || len(c.Workstreams) != 1 {
 		t.Fatalf("one failed read reported unavailable: %#v", c)
 	}
-	s.failingSince = time.Now().Add(-unavailableGrace)
+	good := shown().LoadCompletedAt
+	s.failingSince = time.Now().Add(-time.Hour) // an hour of failing reads (deadline exceeded)
 	s.Refresh(ctx)
-	if c := shown(); c.Degraded == nil || len(c.Workstreams) != 0 {
-		t.Fatalf("reads failing past the grace were hidden: %#v", c)
+	if c := shown(); c.Degraded != nil || len(c.Workstreams) != 1 || !c.LoadError || !c.LoadCompletedAt.Equal(good) {
+		t.Fatalf("reads failing past the grace blanked or unmarked the board: degraded=%v rows=%d load_error=%v completed=%v (good %v)",
+			c.Degraded, len(c.Workstreams), c.LoadError, c.LoadCompletedAt, good)
 	}
 	healthy = true
 	s.Refresh(ctx)

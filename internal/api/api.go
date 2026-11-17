@@ -107,6 +107,7 @@ type Server struct {
 	loadKept     atomic.Bool // the latest load was degraded, served last-good rows or was dropped
 	loadStarted  time.Time   // when the latest Source call began (under refreshMu)
 	failingSince time.Time   // first failed live-state read of the current streak (under refreshMu)
+	staleLogged  time.Time   // when a stale-board read failure was last logged (under refreshMu)
 
 	slowLoad      time.Duration  // the load time worth a log line
 	refreshBudget time.Duration  // bounds the load a settle starts
@@ -168,14 +169,20 @@ func (s *Server) refreshLocked(ctx context.Context) bool {
 		if s.failingSince.IsZero() {
 			s.failingSince = now
 		}
-		// One slow read under load is not an outage: keep retrying (Poll runs
-		// every second) and report unavailable only once reads keep failing.
+		// A slow or failing read never blanks the board: with a good board in
+		// hand it stays on screen, marked stale (load_error, and its
+		// load_completed_at says since when), while Poll keeps retrying every
+		// second. Only with no good board yet is the state unavailable.
 		s.mu.Lock()
 		healthy := s.version > 0 && s.cur.Degraded == nil
 		s.mu.Unlock()
-		if healthy && now.Sub(s.failingSince) < unavailableGrace {
+		if healthy {
 			s.loadKept.Store(true)
-			log.Printf("api: live state read failed after %s; retrying before reporting it unavailable", time.Since(s.loadStarted).Round(time.Millisecond))
+			if now.Sub(s.failingSince) < unavailableGrace || now.Sub(s.staleLogged) >= time.Minute {
+				s.staleLogged = now
+				log.Printf("api: live state read failed after %s (failing since %s); showing the last good board, marked stale, and retrying",
+					time.Since(s.loadStarted).Round(time.Millisecond), s.failingSince.Format(time.TimeOnly))
+			}
 			return false
 		}
 		snap = unavailablePostgresSnapshot()
