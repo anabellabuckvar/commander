@@ -12,6 +12,7 @@ cd "$(dirname "$0")/../.."
 N=${CMDR_STRESS_NAME:-cmdrstress}; PORT=${CMDR_PORT:-18931}; I=${CMDR_IMAGE:-commander-engine:latest}
 LIVE=${LIVE_URL:-http://127.0.0.1:8787}; BOMB_S=${BOMB_S:-20}; HOG_S=${HOG_S:-40}
 OUT=${OUT:-$(mktemp -d)}; mkdir -p "$OUT"
+CPUS=${CMDR_CPUS:-2}; MEM=${CMDR_MEMORY:-3g}; PIDS=${CMDR_PIDS:-1024}
 [[ $PORT == 8787 ]] && { echo "refusing the live port" >&2; exit 2; }
 CT=$N-cmdrd; PG=$N-postgres
 
@@ -31,7 +32,7 @@ up() {
     -e POSTGRES_PASSWORD_FILE=/pg/password postgres:17 >/dev/null
   sleep 8
   docker run -d --init --name "$CT" --network "$N-net" -p "127.0.0.1:$PORT:8787" --restart unless-stopped \
-    --cpus 2 --memory 3g --memory-swap 3g --pids-limit 1024 --read-only --tmpfs /tmp:size=256m \
+    --cpus "$CPUS" --memory "$MEM" --memory-swap "$MEM" --pids-limit "$PIDS" --read-only --tmpfs /tmp:size=256m \
     --cap-drop ALL --security-opt no-new-privileges -v "$N-home:/home/commander" "$I" >/dev/null
   sleep 10
 }
