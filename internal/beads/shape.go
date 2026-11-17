@@ -25,6 +25,8 @@ type ShapeNode struct {
 	Responsible string
 	Assigned    string
 	HasReason   bool // description or a parked-from label explains a park
+	// AnswerPending: the user's answer is recorded and not yet applied.
+	AnswerPending bool
 }
 
 // ShapeViolation is one broken rule with the beads it names and the fix.
@@ -360,6 +362,36 @@ func ShapeCheck(nodes []ShapeNode) []ShapeViolation {
 		return false
 	}
 	for _, id := range ids {
+		n := t.byID[id]
+		// k. state: waits are well-formed, a clock never stands in for an
+		// event, and a recorded answer is on a step that can still take it.
+		for _, l := range n.Labels {
+			if !strings.HasPrefix(l, WaitLabelPrefix) && !strings.HasPrefix(l, compactWaitPrefix) {
+				continue
+			}
+			w, ok := ParseWaitLabel(l)
+			if !ok {
+				if n.closed() {
+					continue
+				}
+				add(ShapeViolation{Rule: "bad-wait", Beads: []string{n.ID},
+					Why: fmt.Sprintf("%q carries a wait label cmdrd cannot read (%s), so nothing will ever release it", n.Title, l),
+					Fix: fmt.Sprintf("replace it with a typed wait: cmdr internal-set-objective --bead %s --waiting <kind>:<ref>", n.ID)})
+				continue
+			}
+			if !n.closed() && w.Kind == WaitUntil && EventTimerLabel(w.Ref) {
+				add(ShapeViolation{Rule: "time-wait-for-event", Beads: []string{n.ID},
+					Why: fmt.Sprintf("%q waits on a clock for %q, so the step sits idle after it happens", n.Title, w.Ref),
+					Fix: "use the event wait cmdrd resolves itself: --waiting deploy:<sha>, pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (optionally ,by=<RFC3339>)"})
+			}
+		}
+		if n.AnswerPending && n.closed() {
+			add(ShapeViolation{Rule: "stale-answer", Beads: []string{n.ID},
+				Why: fmt.Sprintf("the user's recorded answer on %q can never apply: the step is already closed", n.Title),
+				Fix: fmt.Sprintf("finish it: cmdr internal-resolve-needs --bead %s --resume-only (it records the answer as superseded)", n.ID)})
+		}
+	}
+	for _, id := range ids {
 		if state[id] == 0 && visit(id, nil) {
 			add(ShapeViolation{Rule: "dependency-cycle", Beads: cycle,
 				Why: "blocked-by chain loops: " + strings.Join(cycle, " → "),
@@ -431,4 +463,28 @@ func FormatShapeRefusal(vs []ShapeViolation) string {
 	}
 	b.WriteString("Fix these in the same batch and resubmit. `cmdr plan check --workstream <id>` lists a tree's problems.")
 	return b.String()
+}
+
+// ShapeTransitions are the status changes a write may not make, comparing the
+// tree before and after it. agent is true when an agent (any COMMANDER_ROLE)
+// made the write: only the user closes their own gate, by answering it.
+func ShapeTransitions(before, after []ShapeNode, agent bool) []ShapeViolation {
+	was := map[string]ShapeNode{}
+	for _, n := range before {
+		was[n.ID] = n
+	}
+	var out []ShapeViolation
+	for _, n := range after {
+		old, ok := was[n.ID]
+		if !ok || !agent || old.closed() || !n.closed() {
+			continue
+		}
+		if !old.gate() || old.prefixed("approver:") != "user" || old.AnswerPending || n.has("superseded") || n.has("withdrawn") {
+			continue
+		}
+		out = append(out, ShapeViolation{Rule: "gate-closed-without-answer", Beads: []string{n.ID},
+			Why: fmt.Sprintf("an agent closed the user's gate %q, but the user has not answered it", n.Title),
+			Fix: fmt.Sprintf("leave %s open for the user's card; if the user said yes in chat, record it: cmdr internal-resolve-needs --bead %s --action approve --relayed '<when, and their exact words>'", n.ID, n.ID)})
+	}
+	return out
 }
