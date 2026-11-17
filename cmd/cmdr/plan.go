@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
@@ -20,8 +21,14 @@ func runPlan(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "get" {
 		return readPlanProposal(args[1:], stdout, stderr)
 	}
+	if len(args) > 0 && args[0] == "check" {
+		return runPlanCheck(args[1:], stdout, stderr)
+	}
+	if len(args) > 0 && args[0] == "template" {
+		return runPlanTemplate(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || (args[0] != "apply" && args[0] != "propose") {
-		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin); cmdr plan get --id ID")
+		fmt.Fprintln(stderr, "usage: cmdr plan apply|propose --file PATH (or - for stdin); cmdr plan get --id ID; cmdr plan check [--dir PROJECT_DIR] [--workstream ID]... [--json]; cmdr plan template NAME --parent ID --subject TEXT [--owner-go]")
 		return 2
 	}
 	fs := flag.NewFlagSet("plan apply", flag.ContinueOnError)
@@ -158,4 +165,77 @@ func loadPlanProposal(id string) ([]byte, error) {
 	var raw []byte
 	e = st.DB().QueryRowContext(ctx, `SELECT payload FROM commander_plan_proposals WHERE id=?`, id).Scan(&raw)
 	return raw, e
+}
+
+type planCheckRoots []string
+
+func (r *planCheckRoots) String() string     { return strings.Join(*r, ",") }
+func (r *planCheckRoots) Set(v string) error { *r = append(*r, v); return nil }
+
+// runPlanCheck reports a project's tree shape problems read-only: the same
+// rules `cmdr plan apply` refuses, so a tree can be cleaned up before re-planning.
+func runPlanCheck(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("plan check", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	dir := fs.String("dir", ".", "project directory")
+	asJSON := fs.Bool("json", false, "print JSON")
+	var roots planCheckRoots
+	fs.Var(&roots, "workstream", "workstream bead id (repeatable; default: every open workstream)")
+	if fs.Parse(args) != nil || fs.NArg() != 0 {
+		return 2
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	vs, e := beads.PlanShapeReport(ctx, *dir, roots)
+	if e != nil {
+		fmt.Fprintln(stderr, e)
+		return 1
+	}
+	if *asJSON {
+		if vs == nil {
+			vs = []beads.ShapeViolation{}
+		}
+		if e = json.NewEncoder(stdout).Encode(vs); e != nil {
+			return 1
+		}
+	} else {
+		if len(vs) == 0 {
+			fmt.Fprintln(stdout, "tree shape: no problems")
+		}
+		for _, v := range vs {
+			fmt.Fprintln(stdout, "- "+v.String())
+		}
+	}
+	if len(vs) > 0 {
+		return 3
+	}
+	return 0
+}
+
+// runPlanTemplate prints a template's plan-apply operations under a parent:
+// the recurring shapes (pr-babysit, app-release, investigation) built so the
+// shape guard accepts them. Merge the ops into a plan apply request.
+func runPlanTemplate(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		fmt.Fprintln(stderr, "usage: cmdr plan template "+strings.Join(beads.PlanTemplateNames(), "|")+" --parent ID --subject TEXT [--owner-go]")
+		return 2
+	}
+	name := args[0]
+	fs := flag.NewFlagSet("plan template", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	parent := fs.String("parent", "", "the track or step the steps go under")
+	subject := fs.String("subject", "", "what the steps are about, e.g. \"notifications redesign\" (no article)")
+	ownerGo := fs.Bool("owner-go", false, "app-release: add the owner's written go before the deploy (off by default)")
+	if fs.Parse(args[1:]) != nil || fs.NArg() != 0 {
+		return 2
+	}
+	ops, e := beads.PlanTemplateOps(name, *parent, *subject, *ownerGo)
+	if e != nil {
+		fmt.Fprintln(stderr, e)
+		return 2
+	}
+	if e = json.NewEncoder(stdout).Encode(map[string]any{"ops": ops}); e != nil {
+		return 1
+	}
+	return 0
 }

@@ -76,7 +76,11 @@ func PlanTemplateOps(name, parent, subject string, ownerGo bool) ([][]string, er
 	}
 	var ops [][]string
 	for _, s := range build(strings.TrimSpace(subject), ownerGo) {
-		ops = append(ops, []string{"create", s.title, "--parent", parent, "--labels", s.labels, "--ref", s.ref, "--silent"})
+		title := s.title
+		if r := []rune(title); len(r) > 0 {
+			title = strings.ToUpper(string(r[0])) + string(r[1:])
+		}
+		ops = append(ops, []string{"create", title, "--parent", parent, "--labels", s.labels, "--ref", s.ref, "--silent"})
 	}
 	for _, s := range build(strings.TrimSpace(subject), ownerGo) {
 		for _, a := range s.after {
