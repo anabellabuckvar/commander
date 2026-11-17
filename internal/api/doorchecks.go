@@ -212,10 +212,13 @@ func checkWaitLabels(added []string, beadLabels func() ([]string, bool)) error {
 		switch w.Kind {
 		case beads.WaitUntil:
 			if w.Ref != "" && !w.Cut && !beads.ReadableUntilLabel(w.Ref) {
-				return fmt.Errorf("wait until:...:%q: the label is what the user reads (\"Waiting for <label>\"), so write it in plain words saying what happens then. If it really waits on something else, wait on that: review:<login>, ci:#N, main-ci:<sha>, prod-tag:<sha>, operator:<running role>, or --state needs-user with --decision", w.Ref)
+				return fmt.Errorf("wait until:...:%q: the label is what the user reads (\"Waiting for <label>\"), so write it in plain words saying what happens then. If it really waits on something else, wait on that: review:<login>, ci:#N, main-ci:<sha>, prod-tag:<sha>, deploy:<sha>, pr:<cond>:#N, event:slack:<channel>:<regexp>, operator:<running role>, or --state needs-user with --decision", w.Ref)
 			}
 			if beads.ReviewTimerLabel(w.Ref) {
 				return fmt.Errorf("wait until:...:%q: a timer standing in for a PR review leaves the review unseen until it fires. cmdrd watches reviews itself: --waiting review:<login> with --review <N>", w.Ref)
+			}
+			if beads.EventTimerLabel(w.Ref) {
+				return fmt.Errorf("wait until:...:%q: a clock time standing in for a deploy, PR or notification leaves the step idle after it happens. cmdrd watches these itself and the step continues the moment it happens: --waiting deploy:<sha> (a successful prod deploy containing the commit), pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (a matching message after now), each optionally with ,by=<RFC3339>", w.Ref)
 			}
 		case beads.WaitReview:
 			if hasPR(added) {

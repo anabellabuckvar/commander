@@ -74,7 +74,7 @@ func checkReviewWaitsHavePR(ctx context.Context, bc beads.Client, dir, beadID, r
 }
 
 // untilAlternatives names the typed waits a slug label usually stands in for.
-const untilAlternatives = "If it really waits on something else, wait on that: review:<login> (with --review <PR>), ci:#N, main-ci:<sha> or prod-tag:<sha> for a release, operator:<running role>, or --state needs-user with --decision when it is the user's call"
+const untilAlternatives = "If it really waits on something else, wait on that: review:<login> (with --review <PR>), ci:#N, main-ci:<sha>, prod-tag:<sha>, deploy:<sha> (a successful prod deploy), pr:<merged|green|approved>:#N, event:slack:<channel id>:<regexp> (a message), operator:<running role>, or --state needs-user with --decision when it is the user's call"
 
 // checkUntilLabelsReadable refuses a timed wait whose label is not plain words:
 // the user reads it as "Waiting for <label>", and a slug is usually a stand-in
@@ -89,6 +89,9 @@ func checkUntilLabelsReadable(waits []beads.Wait) error {
 		}
 		if beads.ReviewTimerLabel(w.Ref) {
 			return fmt.Errorf("--waiting until:...:%q: a timer standing in for a PR review leaves the review unseen until it fires. cmdrd watches reviews itself, in any repo, and wakes you when one lands: --waiting review:<login> with --review <N> (this project's repo) or --review <owner>/<name>#N (another repo)", strings.TrimSpace(w.Ref))
+		}
+		if beads.EventTimerLabel(w.Ref) {
+			return fmt.Errorf("--waiting until:...:%q: a clock time standing in for a deploy, PR or notification leaves the step idle after it happens. cmdrd watches these itself and the step continues the moment it happens: --waiting deploy:<sha> (a successful prod deploy containing the commit), pr:<merged|green|approved>:#N, or event:slack:<channel id>:<regexp> (a matching message after now), each optionally with ,by=<RFC3339>", strings.TrimSpace(w.Ref))
 		}
 	}
 	return nil
