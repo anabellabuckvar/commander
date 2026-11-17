@@ -61,3 +61,47 @@ func TestWorkstreamStatusesAreTheSidebar(t *testing.T) {
 		t.Fatal("a Manager's statuses carry its own board version")
 	}
 }
+
+// Eric wants to see who is working on what: each track carries its agents
+// (name, runtime, step, state, since) and each row counts the ones working.
+func TestWorkstreamStatusesCarryTheAgents(t *testing.T) {
+	now := int64(1_800_000_000)
+	ws := SnapWorkstream{Project: "vibe-apps", BeadID: "zq9h.6", Steps: []SnapStep{
+		{BeadID: "zq9h.6.76", Title: "Release 2b", Track: true, Children: []SnapStep{
+			{BeadID: "zq9h.6.76.2", Title: "2b chain 2/6: fix or drop the 03:17 validate failures"}}},
+		{BeadID: "zq9h.6.63", Title: "Chart open", Track: true},
+	}}
+	snap := Snapshot{
+		BoardVersions: map[string]int{"commander": 1},
+		Workstreams:   []SnapWorkstream{ws},
+		Executions: []SnapExecution{
+			{Role: "operator-exec-vm-2", State: "running", BeadID: "zq9h.6.76.2", Runtime: "claude"},
+			{Role: "operator-exec-vm-9", State: "exited", BeadID: "zq9h.6.63", Runtime: "codex"},
+		},
+		Agents: map[string]SnapAgent{"operator-exec-vm-2": {State: "working", Since: now - 1800}},
+		Display: &Display{Workstreams: []BoardRow{{N: 4, Key: "vibe-apps:zq9h.6", BeadID: "zq9h.6", Title: "QA Hub Performance", Kind: "about",
+			Tracks: []BoardTrack{
+				{Letter: ".9", BeadID: "zq9h.6.76", Title: "Release 2b", Kind: "working", Text: "Agent: 2b chain 2/6", Since: now - 600},
+				{Letter: ".2", BeadID: "zq9h.6.63", Title: "Chart open", Kind: "waiting", Text: "Waiting for: Release 2b"},
+			}}}},
+	}
+	st := WorkstreamStatuses(snap, "commander", now)
+	row := st.Workstreams[0]
+	if row.AgentsWorking != 1 {
+		t.Fatalf("agents_working = %d, want 1", row.AgentsWorking)
+	}
+	rel := row.Tracks[0]
+	if rel.Age != "10m" || len(rel.Agents) != 1 {
+		t.Fatalf("release track = %+v", rel)
+	}
+	a := rel.Agents[0]
+	if a.Name != "operator-exec-vm-2" || a.Runtime != "claude" || a.State != "working" || a.Since != "30m" || !strings.HasPrefix(a.Step, "2b chain 2/6") {
+		t.Fatalf("agent = %+v", a)
+	}
+	if len(row.Tracks[1].Agents) != 0 {
+		t.Fatalf("an exited run is listed as an agent: %+v", row.Tracks[1].Agents)
+	}
+	if !strings.Contains(st.JSON(), `"agents_working":1`) {
+		t.Fatalf("json = %s", st.JSON())
+	}
+}

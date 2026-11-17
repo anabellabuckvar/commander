@@ -20,11 +20,15 @@ type Statuses struct {
 
 // StatusRow is one workstream row as the sidebar shows it.
 type StatusRow struct {
-	N      int           `json:"n"`
-	Title  string        `json:"title"`
-	Color  string        `json:"color"`
-	Text   string        `json:"text"`
-	Age    string        `json:"age,omitempty"`
+	N     int    `json:"n"`
+	Title string `json:"title"`
+	Color string `json:"color"`
+	Text  string `json:"text"`
+	Age   string `json:"age,omitempty"`
+	// AgentsWorking counts the agents on its steps that are in a turn now.
+	AgentsWorking int `json:"agents_working"`
+	// Agents are those on its steps outside every track (a track lists its own).
+	Agents []StatusAgent `json:"agents,omitempty"`
 	Tracks []StatusTrack `json:"tracks,omitempty"`
 }
 
@@ -34,7 +38,19 @@ type StatusTrack struct {
 	Title  string        `json:"title"`
 	Color  string        `json:"color"`
 	Text   string        `json:"text"`
+	Age    string        `json:"age,omitempty"`
+	Agents []StatusAgent `json:"agents,omitempty"`
 	Tracks []StatusTrack `json:"tracks,omitempty"`
+}
+
+// StatusAgent is one agent running on a track's steps, from the same live run
+// data the board shows (the executions and each agent's observed chat state).
+type StatusAgent struct {
+	Name    string `json:"name"`
+	Runtime string `json:"runtime,omitempty"` // claude or codex
+	Step    string `json:"step"`              // the step it works on
+	Since   string `json:"since,omitempty"`   // how long it has been in this state
+	State   string `json:"state"`             // working | idle | waiting
 }
 
 // StatusAsk is one NEEDS YOU item as shown: where it sits, its title, the ask and its age.
@@ -72,10 +88,35 @@ func WorkstreamStatuses(snap Snapshot, role string, now int64) Statuses {
 		return out
 	}
 	numbers := map[string]int{}
+	steps := map[string]SnapWorkstream{}
+	for _, ws := range snap.Workstreams {
+		steps[ws.Project+":"+ws.BeadID] = ws
+	}
 	for _, w := range snap.Display.Workstreams {
 		numbers[w.Title] = w.N
-		out.Workstreams = append(out.Workstreams, StatusRow{N: w.N, Title: w.Title, Color: StatusColor(w.Kind), Text: w.Text,
-			Age: statusAge(w.Since, now), Tracks: statusTracks(w.Tracks)})
+		ag := statusAgents{snap: snap, ws: steps[w.Key], now: now}
+		row := StatusRow{N: w.N, Title: w.Title, Color: StatusColor(w.Kind), Text: w.Text,
+			Age: statusAge(w.Since, now), Tracks: ag.tracks(w.Tracks)}
+		inTrack := map[string]bool{}
+		var mark func([]StatusTrack)
+		mark = func(ts []StatusTrack) {
+			for _, t := range ts {
+				for _, a := range t.Agents {
+					inTrack[a.Name] = true
+				}
+				mark(t.Tracks)
+			}
+		}
+		mark(row.Tracks)
+		for _, a := range ag.on(w.BeadID) {
+			if a.State == "working" {
+				row.AgentsWorking++
+			}
+			if !inTrack[a.Name] {
+				row.Agents = append(row.Agents, a)
+			}
+		}
+		out.Workstreams = append(out.Workstreams, row)
 	}
 	for _, a := range snap.NeedsYou {
 		where := ""
@@ -91,10 +132,50 @@ func WorkstreamStatuses(snap Snapshot, role string, now int64) Statuses {
 	return out
 }
 
-func statusTracks(ts []BoardTrack) []StatusTrack {
+// statusAgents finds the agents running on a workstream's steps.
+type statusAgents struct {
+	snap Snapshot
+	ws   SnapWorkstream
+	now  int64
+}
+
+func (a statusAgents) tracks(ts []BoardTrack) []StatusTrack {
 	var out []StatusTrack
 	for _, t := range ts {
-		out = append(out, StatusTrack{Letter: t.Letter, Title: t.Title, Color: StatusColor(t.Kind), Text: t.Text, Tracks: statusTracks(t.Children)})
+		out = append(out, StatusTrack{Letter: t.Letter, Title: t.Title, Color: StatusColor(t.Kind), Text: t.Text,
+			Age: statusAge(t.Since, a.now), Agents: a.on(t.BeadID), Tracks: a.tracks(t.Children)})
+	}
+	return out
+}
+
+// on lists the agents on bead id and the steps under it, in execution order.
+func (a statusAgents) on(id string) []StatusAgent {
+	under := map[string]string{} // bead id -> step title
+	var walk func([]SnapStep, bool)
+	walk = func(level []SnapStep, in bool) {
+		for _, s := range level {
+			mine := in || s.BeadID == id
+			if mine {
+				under[s.BeadID] = plainTitle(s.Title)
+			}
+			walk(s.Children, mine)
+		}
+	}
+	walk(a.ws.Steps, a.ws.BeadID == id)
+	var out []StatusAgent
+	for _, x := range a.snap.Executions {
+		title, ok := under[x.BeadID]
+		if !ok && x.TaskBeadID != "" {
+			title, ok = under[x.TaskBeadID]
+		}
+		if !ok || x.State == "" || x.State == "exited" || x.State == "finished" || x.State == "died" {
+			continue
+		}
+		st := StatusAgent{Name: x.Role, Runtime: x.Runtime, Step: title, State: x.State}
+		if ag, ok := a.snap.Agents[x.Role]; ok && ag.State != "" {
+			st.State, st.Since = ag.State, statusAge(ag.Since, a.now)
+		}
+		out = append(out, st)
 	}
 	return out
 }
