@@ -202,3 +202,35 @@ func TestParentRowSaysWhatItCovers(t *testing.T) {
 		t.Fatalf("a nested row keeps its state, even with rows under it: %+v", r.Tracks[0])
 	}
 }
+
+// Track 4.2 on Nov 17 read "Commander idle; chart fix needs re-review" and 4.4
+// "Release 2b stalled, commander idle at review": the written line claimed
+// states its structured lead did not hold. Now the release step is carried by
+// its chain, so the line says what the chain is doing.
+func TestWrittenLineNeverClaimsAStateTheLeadLacks(t *testing.T) {
+	lead := nextactor.Result{Actor: nextactor.Agent, Reason: "blocked:executing", Via: []string{"Release 2b"},
+		Text: "After “Release 2b”: working on “2b chain 2/6: fix or drop the 03:17 validate failures”"}
+	row := nextactor.Row{Lead: lead}
+	for _, written := range []string{"Commander idle; chart fix needs re-review", "Release 2b stalled, commander idle at review"} {
+		describe := func(key, actor, reason, opener, facts string) (string, string, bool) { return written, "", true }
+		got := describeRow(describe, "p:t", row, "facts", lead.Text)
+		if got != "Waiting for: Release 2b (agent: 2b chain 2/6: fix or drop the 03:17 validate failures)" {
+			t.Fatalf("written %q shown as %q, want the structured line", written, got)
+		}
+	}
+	// A written line that only shortens the structured state is kept.
+	keep := func(key, actor, reason, opener, facts string) (string, string, bool) {
+		return "Waiting for Release 2b's fix-or-drop step", "", true
+	}
+	if got := describeRow(keep, "p:t", row, "facts", lead.Text); got != "Waiting for Release 2b's fix-or-drop step" {
+		t.Fatalf("a faithful written line was replaced: %q", got)
+	}
+	// "Idle" is true when the lead says so.
+	idle := nextactor.Row{Lead: nextactor.Result{Actor: nextactor.Commander, Reason: "idle_agent"}}
+	say := func(key, actor, reason, opener, facts string) (string, string, bool) {
+		return "Agent idle: Commander to direct it", "", true
+	}
+	if got := describeRow(say, "p:t", idle, "facts", "Commander to tell the idle agent what to do next"); got != "Agent idle: Commander to direct it" {
+		t.Fatalf("a true idle line was replaced: %q", got)
+	}
+}

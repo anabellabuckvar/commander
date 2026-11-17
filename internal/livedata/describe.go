@@ -90,16 +90,51 @@ func describeRow(describe DescribeFunc, key string, row nextactor.Row, facts, fa
 		actor = "waiting_on_step"
 	}
 	text, signal, ok := describe(key, actor, row.Lead.Reason, Opener(row.Lead), facts)
-	if !ok {
-		if via := row.Lead.Via; len(via) > 0 && row.Lead.Actor != nextactor.User && row.Lead.Actor != nextactor.Stuck {
-			return "Waiting for: " + via[len(via)-1]
-		}
-		return placeholder(fallback)
+	if !ok || addsClaims(text, row.Lead) {
+		// The rule-based line, from the structured lead: a written line may only
+		// say it shorter, never claim a state ("idle", "stalled") the lead does
+		// not hold.
+		return structuredLine(row.Lead, fallback)
 	}
 	if signal != "" && row.Lead.Actor == nextactor.Agent {
 		noteDisagreement(key, signal)
 	}
 	return text
+}
+
+// structuredLine is the row's line from its structured lead alone: a step it
+// waits on, then what that step is doing ("Waiting for: Release 2b (agent:
+// 2b chain 2/6: fix or drop)"), or the rule-based line.
+func structuredLine(lead nextactor.Result, fallback string) string {
+	if via := lead.Via; len(via) > 0 && lead.Actor != nextactor.User && lead.Actor != nextactor.Stuck {
+		line := "Waiting for: " + via[len(via)-1]
+		if what := placeholder(fallback); what != "" && !strings.HasPrefix(what, "Waiting for") && !strings.Contains(what, via[len(via)-1]) {
+			line += " (" + lowerFirst(what) + ")"
+		}
+		return line
+	}
+	return placeholder(fallback)
+}
+
+// addsClaims: a written line asserts a state the structured lead does not
+// hold. "Idle" needs an idle reason; "stalled" or "stuck" needs a stuck lead.
+func addsClaims(text string, lead nextactor.Result) bool {
+	t := strings.ToLower(text)
+	if strings.Contains(t, "idle") && !strings.Contains(lead.Reason, "idle") {
+		return true
+	}
+	if (strings.Contains(t, "stalled") || strings.Contains(t, "stuck")) && lead.Actor != nextactor.Stuck {
+		return true
+	}
+	return false
+}
+
+func lowerFirst(s string) string {
+	r := []rune(s)
+	if len(r) > 1 && unicode.IsUpper(r[0]) && !unicode.IsUpper(r[1]) {
+		r[0] = unicode.ToLower(r[0])
+	}
+	return string(r)
 }
 
 // placeholder is the rule-based line shown until the model's line is ready:
