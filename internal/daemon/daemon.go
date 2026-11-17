@@ -161,6 +161,7 @@ type Daemon struct {
 	executionWG       sync.WaitGroup
 	orchestrationMode string // read from canonical database before starting workers
 	store             *store.Store
+	boardStore        *store.Store // the board's own read pool (st itself on SQLite)
 	opencode          opencode.Client
 	beads             beads.Client
 	reads             beads.Client // cached, export-backed reader for periodic sweeps
@@ -238,6 +239,15 @@ func New() (*Daemon, error) {
 	st, err := store.Open(filepath.Join(home, "state.db"))
 	if err != nil {
 		return nil, fmt.Errorf("daemon: open store: %w", err)
+	}
+
+	// The board and the invariant read on their own pool: writers waiting for
+	// the custody lock hold the shared pool's connections, and a board read that
+	// waits for one goes stale.
+	boardStore, err := st.ReadPool(4)
+	if err != nil {
+		_ = st.Close()
+		return nil, fmt.Errorf("daemon: open board read pool: %w", err)
 	}
 
 	chatEngine := newChatEngine(home, st)
@@ -321,7 +331,7 @@ func New() (*Daemon, error) {
 			return chatEngine.CapacityFailures()
 		},
 		OnSnapshot:  func(snap *livedata.Snapshot) { checkPlans(health, snap); checkStuck(health, snap, time.Now()) },
-		Deps:        livedata.Deps{Store: st, Beads: reads, Scrape: livedata.ScrapeAgentStates, UsageCapacity: func() string { return chat.UsageCapacityCause(home, time.Now()) }, PlanningUsage: func(role string) string { return chat.PlanningUsageCause(home, role, time.Now()) }},
+		Deps:        livedata.Deps{Store: boardStore, Beads: reads, Scrape: livedata.ScrapeAgentStates, UsageCapacity: func() string { return chat.UsageCapacityCause(home, time.Now()) }, PlanningUsage: func(role string) string { return chat.PlanningUsageCause(home, role, time.Now()) }},
 		UnreadEvery: 5 * time.Second, // Unread is set below from the waker's inbox reads
 		WaitsChecked: func() time.Time {
 			if waits == nil {
@@ -467,7 +477,7 @@ func New() (*Daemon, error) {
 		pitch = newPitchWatcher(home, watch.latest, waits.mail)
 		invariantReads = beads.ExportReads(beads.IsolatedIncremental(cached))
 		invariant.fresh = func(ctx context.Context) (livedata.Snapshot, bool) {
-			data, ok := loadInvariant(ctx, livedata.Deps{Store: st, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
+			data, ok := loadInvariant(ctx, livedata.Deps{Store: boardStore, Beads: invariantReads, Scrape: livedata.ScrapeAgentStates})
 			data.Objectives = livedata.MarkReported(data.Objectives, reported.list(), nil)
 			return livedata.BuildSnapshot(data, nil), ok
 		}
@@ -481,6 +491,7 @@ func New() (*Daemon, error) {
 
 	d := &Daemon{
 		store:              st,
+		boardStore:         boardStore,
 		opencode:           oc,
 		beads:              bd,
 		reads:              reads,
@@ -758,6 +769,9 @@ func (d *Daemon) shutdown() {
 	}
 	if d.watchdog != nil {
 		d.watchdog.Stop()
+	}
+	if d.boardStore != nil && d.boardStore != d.store {
+		_ = d.boardStore.Close()
 	}
 	if d.store != nil {
 		_ = d.store.Close()

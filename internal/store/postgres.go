@@ -110,6 +110,25 @@ func OpenPostgres(dsn string) (*Store, error) {
 	return s, nil
 }
 
+// ReadPool returns a Store on its own pool of n connections, for readers that
+// must never queue behind writers: every write transaction holds a pooled
+// connection while it waits for the custody lock, so a busy write path can take
+// the whole shared pool. SQLite has one writer and shares s.
+func (s *Store) ReadPool(n int) (*Store, error) {
+	if !s.postgres {
+		return s, nil
+	}
+	db, err := sql.Open(pgbind.Driver, s.postgresDSN)
+	if err != nil {
+		return nil, errors.New("store: invalid Postgres connection configuration")
+	}
+	db.SetMaxOpenConns(n)
+	db.SetMaxIdleConns(n)
+	db.SetConnMaxIdleTime(time.Minute)
+	db.SetConnMaxLifetime(10 * time.Minute)
+	return &Store{db: db, postgres: true, postgresDSN: s.postgresDSN}, nil
+}
+
 func (s *Store) IsPostgres() bool { return s.postgres }
 
 func (s *Store) migratePostgres(ctx context.Context) error {
