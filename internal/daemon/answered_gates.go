@@ -23,6 +23,9 @@ func gateCloseReason(g store.AnsweredGate) string {
 	switch {
 	case dropChoice.MatchString(g.Choice):
 		return "Superseded: the user chose “" + answer + "”"
+	case !g.Gate:
+		// A step that is not a gate (a dying agent's card) only closes on a drop.
+		return ""
 	case g.Approved && !notYet.MatchString(g.Choice):
 		return "Approved by the user: " + answer
 	}

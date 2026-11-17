@@ -162,7 +162,7 @@ func (s *Store) ClaimNextExecution(ctx context.Context, agent string, capacity i
      AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(b.labels) lab WHERE lab LIKE 'run-on:%' AND lab <> 'run-on:'||substring(? from 7))))
    AND jsonb_exists(?::jsonb,p.type) AND b.execution_capabilities <@ ?::jsonb AND commander_execution_allowed(b.project_id,b.id)
    AND commander_execution_capacity_allowed(b.project_id,b.id,?,?,?)
-   AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running')
+   AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.project_id=b.project_id AND (r.id=b.active_run_id OR r.task_bead_id=b.id) AND r.status='running')
    AND NOT EXISTS(SELECT 1 FROM bead_tasks child WHERE child.project_id=b.project_id AND child.parent_id=b.id AND child.status NOT IN('closed','deferred') AND child.deleted_at IS NULL)
    AND NOT EXISTS(SELECT 1 FROM execution_slots x WHERE x.project_id=b.project_id AND x.bead_id=b.id)
    ORDER BY commander_execution_priority(b.project_id,b.id),b.priority,b.created_at,b.project_id,b.id LIMIT 1 FOR UPDATE OF b SKIP LOCKED`, now.Unix(), agent, agent, agent, string(caps), string(caps), perWorkstream, now.Unix(), agent).Scan(&c.Project.ID, &c.BeadID, &c.Title, &c.Description, &c.Acceptance, &c.PlanRevision, &c.Epoch, &c.PlanningCommander, &c.Project.Name, &c.Project.Path, &c.Project.Type, &c.Project.RepoPath, &c.Project.Status, &c.ResumeRunID)

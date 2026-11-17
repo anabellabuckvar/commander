@@ -233,9 +233,9 @@ const defaultSlowLoad = livedata.SlowLoad
 // liveReadTimeout bounds one live-state build; changeBatch gathers a burst of
 // database changes into one rebuild.
 const (
-	liveReadTimeout = 8 * time.Second
+	liveReadTimeout = 20 * time.Second // a load of the largest project takes 3-8 s on the busy VM
 	changeBatch     = 500 * time.Millisecond
-	minRebuildGap   = time.Second
+	minRebuildGap   = 3 * time.Second // at most one rebuild every 3 s under a burst of writes
 )
 
 // boardBlind are tables whose changes the board never reads: token usage and

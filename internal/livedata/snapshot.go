@@ -266,7 +266,8 @@ type SnapStep struct {
 	ResultReadyAt        int64                   `json:"result_ready_at,omitempty"`
 	ResultLine           string                  `json:"result_line,omitempty"`
 	NoBrief              bool                    `json:"no_brief,omitempty"`
-	Answered             bool                    `json:"answered,omitempty"` // the user answered its card
+	Answered             bool                    `json:"answered,omitempty"`     // the user answered its card
+	LiveRuntime          string                  `json:"live_runtime,omitempty"` // claude or codex while a live agent runs it
 	QuestionWaiting      bool                    `json:"question_waiting,omitempty"`
 	HumanAnswerPending   bool                    `json:"human_answer_pending,omitempty"`
 	ExecutionMode        string                  `json:"execution_mode,omitempty"`
@@ -967,6 +968,7 @@ func (s *Source) build(ctx context.Context, data Data) Snapshot {
 	snap := BuildSnapshot(data, s.unread)
 	RefreshWorkflowHeads(&snap, s.PRHeads)
 	HoldRedMergeCards(&snap, s.PRHeads)
+	MarkLiveRuntimes(&snap)
 	if s.InvalidState != nil {
 		snap.InvalidState = s.InvalidState()
 	}

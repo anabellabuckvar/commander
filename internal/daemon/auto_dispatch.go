@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
@@ -18,6 +20,20 @@ type dispatchJob struct {
 	project   string
 	bead      string
 	title     string
+	died      bool // its last agent died: restarted unless maxDeaths died in a row
+}
+
+// maxDeaths agents dying in a row without a report turn the step into a card.
+const maxDeaths = 3
+
+// deathCard puts a step whose agents keep dying on the user's list.
+func deathCard(ctx context.Context, j dispatchJob, n int, run func(ctx context.Context, args ...string) error) {
+	decision := fmt.Sprintf(`{"question":"The agent on %q stopped %d times in a row without a report. Try again, or drop the step?","options":[{"label":"Try again","recommended":true},{"label":"Drop it"}]}`, j.title, n)
+	if err := run(ctx, "internal-set-objective", "--project", j.project, "--bead", j.bead, "--state", "needs-user", "--ask", "Agent keeps stopping", "--decision", decision, "--no-notify"); err != nil {
+		log.Printf("auto-dispatch: %s %s: card after %d deaths: %v", j.project, j.bead, n, err)
+		return
+	}
+	log.Printf("auto-dispatch: %s %s: %d agents died in a row; the step is on the user's list", j.project, j.bead, n)
 }
 
 // autoDispatchJobs are the steps whose only holder is a Manager dispatch (or
@@ -59,7 +75,7 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 					continue
 				}
 				if dispatchable(s, byID) && !running[key{ws.ProjectID, s.BeadID}] && !asked[ws.Project+"\x00"+s.BeadID] {
-					out = append(out, dispatchJob{projectID: ws.ProjectID, project: ws.Project, bead: s.BeadID, title: s.Title})
+					out = append(out, dispatchJob{projectID: ws.ProjectID, project: ws.Project, bead: s.BeadID, title: s.Title, died: agentDied(s)})
 				}
 				walk(s.Children)
 			}
@@ -71,30 +87,67 @@ func autoDispatchJobs(snap livedata.Snapshot) []dispatchJob {
 	return out
 }
 
+// The watcher: every step that is agent-owned, not done and unblocked, with
+// no live agent on it, gets one. That is the only way agents start. A step
+// has at most one live agent: a step with a live, starting or queued agent is
+// skipped, never given a second.
 func dispatchable(s livedata.SnapStep, byID map[string]livedata.SnapStep) bool {
-	if s.Status != "open" || s.Superseded || s.Withdrawn || s.Hold || s.Gate || s.ClosingGate || s.Track || s.Task ||
-		s.ExecutionReady || s.ExecutionMode != "active" || s.ResultReadyAt > 0 || s.QuestionWaiting ||
-		s.HumanAnswerPending || s.State == "needs-user" || s.OwnerState == "working" ||
-		s.NoBrief || (s.Lane != "" && s.Lane != "agents" && s.Lane != "commander") { // a person's task (lane you or elsewhere) is never an agent's
-		return false
+	return agentOwned(s) && !stepDone(s) && !stepBlocked(s, byID) && !liveAgent(s)
+}
+
+// agentOwned: an implementer's or a reviewer's step, not the user's, someone
+// outside's, a gate or a container.
+func agentOwned(s livedata.SnapStep) bool {
+	return !s.Gate && !s.ClosingGate && !s.Track && !s.Task && (s.Lane == "" || s.Lane == "agents" || s.Lane == "commander")
+}
+
+// stepDone: closed, dropped, or holding a finished result being closed.
+func stepDone(s livedata.SnapStep) bool {
+	return (s.Status != "open" && s.Status != "in_progress") || s.Superseded || s.Withdrawn ||
+		(s.ResultReadyAt > 0 && !agentDied(s))
+}
+
+// stepBlocked: something else must happen first: a blocker or child step not
+// done, a wait (an agent asleep on its event counts as alive until it fires),
+// the user's card or answer, a question, a hold, or execution switched off.
+// A paused or held parent blocks too (autoDispatchJobs skips its subtree).
+func stepBlocked(s livedata.SnapStep, byID map[string]livedata.SnapStep) bool {
+	if s.Hold || s.State == "needs-user" || s.QuestionWaiting || s.HumanAnswerPending || (s.ExecutionMode != "" && s.ExecutionMode != "active") {
+		return true
 	}
 	for _, w := range s.TypedWaits {
 		if !beads.IsManagerHandoff(w) {
-			return false // another wait holds it
+			return true
 		}
 	}
 	for _, c := range s.Children {
 		if c.Status != "closed" && c.State != "done" && !c.Superseded {
-			return false
+			return true
 		}
 	}
 	for _, id := range s.BlockedBy {
 		dep, ok := byID[id]
 		if !ok || (dep.Status != "closed" && dep.State != "done" && !dep.Superseded) {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
+}
+
+// liveAgent: an agent is running on the step, starting, or queued for it.
+func liveAgent(s livedata.SnapStep) bool {
+	return s.ExecutionReady || s.OwnerState == livedata.OwnerWorking || s.LiveRuntime != ""
+}
+
+// agentDied: the step's last agent ended without a report (its result is
+// cmdrd's note of that, or the run stopped), so the next check starts another.
+func agentDied(s livedata.SnapStep) bool {
+	for _, p := range []string{"Execution exited without", "Execution ended with an error", "Mac execution ended"} {
+		if strings.HasPrefix(s.ResultLine, p) {
+			return true
+		}
+	}
+	return s.ResultReadyAt == 0 && (s.OwnerState == livedata.OwnerDied || strings.HasPrefix(s.ExecutionError, store.AgentStopped))
 }
 
 // managerRunning: role names a Manager whose chat is up. With none recorded
@@ -132,6 +185,13 @@ func (d *Daemon) autoDispatchOnce(ctx context.Context) {
 		return
 	}
 	for _, j := range autoDispatchJobs(snap) {
+		if j.died {
+			n, err := d.store.DeathsInARow(ctx, j.projectID, j.bead)
+			if err == nil && n >= maxDeaths {
+				deathCard(ctx, j, n, cmdrCommand)
+				continue
+			}
+		}
 		ok, err := d.store.DispatchReady(ctx, j.projectID, j.bead, dispatchHandoff)
 		switch {
 		case err != nil:

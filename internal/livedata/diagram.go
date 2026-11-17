@@ -36,13 +36,15 @@ type Diagram struct {
 // (a finding). Who says more: reviewers' or a team's names, what runs and
 // what starts it.
 type DiagramStep struct {
-	Why       string   `json:"why,omitempty"`
-	ID        string   `json:"id"`
-	Title     string   `json:"title"`
-	Kind      string   `json:"kind"`
-	Text      string   `json:"text"`
-	Since     int64    `json:"since,omitempty"`
-	Lane      string   `json:"lane"`
+	Why   string `json:"why,omitempty"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Kind  string `json:"kind"`
+	Text  string `json:"text"`
+	Since int64  `json:"since,omitempty"`
+	Lane  string `json:"lane"`
+	// Runtime is claude or codex while a live agent runs the step, else "".
+	Runtime   string   `json:"runtime,omitempty"`
 	Actor     string   `json:"actor"` // whose line it is on: you, manager, operators, reviewers, automatic ("" = nobody's)
 	Who       string   `json:"who,omitempty"`
 	Gate      bool     `json:"gate,omitempty"`
@@ -198,7 +200,7 @@ const maxChildDepth = 3
 // it in Children. The second result is the wait step's id when it split.
 func (f flow) diagramSteps(s SnapStep, w *WorkflowStep, after []string, depth int) ([]DiagramStep, string) {
 	h := f.hand(s, w.Text)
-	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who,
+	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who, Runtime: s.LiveRuntime,
 		Gate: s.Gate, Criteria: s.Criteria, After: after, Track: s.Track}
 	var out []DiagramStep
 	cur := ""

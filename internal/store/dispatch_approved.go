@@ -45,11 +45,26 @@ func (s *Store) dispatch(ctx context.Context, pid int64, bead string, handoff fu
 			return e
 		}
 		receipts := slices.DeleteFunc(slices.Clone(labels), func(l string) bool { return !handoff(l) })
-		if status != "open" || ready || active || (needReceipt && len(receipts) == 0) || strings.TrimSpace(description) == "" || strings.TrimSpace(acceptance) == "" {
+		if needReceipt && (status != "open" || ready || active || len(receipts) == 0 || strings.TrimSpace(description) == "" || strings.TrimSpace(acceptance) == "") {
 			return nil
+		}
+		if !needReceipt {
+			// The watcher: one live agent per step, never a second.
+			var live bool
+			if e := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_runs r WHERE r.project_id=? AND r.task_bead_id=? AND r.status='running')`, pid, bead).Scan(&live); e != nil {
+				return e
+			}
+			if (status != "open" && status != "in_progress") || ready || active || live {
+				return nil
+			}
 		}
 		kept, e := json.Marshal(slices.DeleteFunc(labels, handoff))
 		if e != nil {
+			return e
+		}
+		// A step whose agent died holds cmdrd's note of that as its result: clear
+		// it so the next agent can claim the step.
+		if _, e := q.ExecContext(ctx, `UPDATE bead_tasks SET status='open',result_run_id=CASE WHEN result_summary ~ '^(Execution exited without|Execution ended with an error|Mac execution ended)' THEN NULL ELSE result_run_id END,result_ready_at=CASE WHEN result_summary ~ '^(Execution exited without|Execution ended with an error|Mac execution ended)' THEN 0 ELSE result_ready_at END WHERE project_id=? AND id=? AND status IN('open','in_progress')`, pid, bead); e != nil {
 			return e
 		}
 		if _, e := q.ExecContext(ctx, `UPDATE bead_tasks SET plan_revision=plan_revision+1,execution_ready=TRUE,execution_attempts=0,execution_due_at=0,execution_error='',labels=?::jsonb WHERE project_id=? AND id=?`, string(kept), pid, bead); e != nil {

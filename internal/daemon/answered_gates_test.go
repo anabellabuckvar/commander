@@ -18,8 +18,8 @@ func TestAnsweredGatesCloseOnTheAnswer(t *testing.T) {
 		// 21:12 Nov 17: these two were closed in error and reopened.
 		{store.AnsweredGate{Bead: "6yen.12.3", Choice: "Not now", Text: "then i dont care i dont want to fix that rn"}, ""},
 		{store.AnsweredGate{Bead: "596t.11.11", Choice: "Not yet", Text: "Switcher shows the Admin org and app orgs"}, ""},
-		{store.AnsweredGate{Bead: "y", Choice: "Not yet", Approved: true}, ""},
-		{store.AnsweredGate{Bead: "x", Choice: "Merge it", Approved: true}, "Approved by the user: Merge it"},
+		{store.AnsweredGate{Bead: "y", Choice: "Not yet", Approved: true, Gate: true}, ""},
+		{store.AnsweredGate{Bead: "x", Choice: "Merge it", Approved: true, Gate: true}, "Approved by the user: Merge it"},
 		{store.AnsweredGate{Bead: "d624.16.5", Choice: "Wait for the leak fix"}, ""},
 	}
 	for _, c := range cases {

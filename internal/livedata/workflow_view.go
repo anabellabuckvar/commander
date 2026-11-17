@@ -19,6 +19,8 @@ type FlowRow struct {
 	Now    bool   `json:"now,omitempty"`
 	Gate   bool   `json:"gate,omitempty"`
 	Inside string `json:"inside,omitempty"` // the open stage it is drawn under
+	// Runtime is claude or codex while a live agent runs it.
+	Runtime string `json:"runtime,omitempty"`
 }
 
 var laneLabel = map[string]string{"you": "You", "manager": "Commander", "operators": "Agents", "reviewers": "Reviewers", "automatic": "Automatic"}
@@ -100,7 +102,7 @@ func FlowOf(d Diagram, now int64) []FlowRow {
 	out := make([]FlowRow, 0, len(flat))
 	for _, x := range flat {
 		out = append(out, FlowRow{ID: x.s.ID, Title: x.s.Title, Lane: LaneLabel(x.s.Actor), Kind: x.s.Kind, Color: StatusColor(x.s.Kind),
-			Text: x.s.Text, Age: statusAge(x.s.Since, now), Now: nowSet[x.s.ID], Gate: x.s.Gate, Inside: x.inside})
+			Text: x.s.Text, Age: statusAge(x.s.Since, now), Now: nowSet[x.s.ID], Gate: x.s.Gate, Inside: x.inside, Runtime: x.s.Runtime})
 	}
 	return out
 }
