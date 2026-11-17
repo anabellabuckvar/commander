@@ -6,3 +6,5 @@ app/out
 app/release
 bin
 tests/evals
+.worktrees
+.worktrees.noindex
