@@ -27,6 +27,9 @@ func TestWatcherStartsExactlyWhatHasNoLiveAgent(t *testing.T) {
 		{"queued for an agent", func(s *livedata.SnapStep) { s.ExecutionReady = true }, false},
 		{"asleep on its event", func(s *livedata.SnapStep) { s.TypedWaits = []beads.Wait{{Kind: beads.WaitDeploy, Ref: "abc"}} }, false},
 		{"blocked", func(s *livedata.SnapStep) { s.BlockedBy = []string{"o"} }, false},
+		// zq9h.8.37.5 on Nov 17: its blocker 6.78.6 is in another workstream and done.
+		{"blocker done in another workstream", func(s *livedata.SnapStep) { s.BlockedBy, s.DoneBlockers = []string{"x.6"}, []string{"x.6"} }, true},
+		{"blocker open in another workstream", func(s *livedata.SnapStep) { s.BlockedBy = []string{"x.6"} }, false},
 		{"finished, closing itself", func(s *livedata.SnapStep) { s.ResultReadyAt, s.ResultLine = 5, "Final report: done" }, false},
 		{"Eric's step", func(s *livedata.SnapStep) { s.Lane = "you" }, false},
 		{"a gate", func(s *livedata.SnapStep) { s.Gate = true }, false},

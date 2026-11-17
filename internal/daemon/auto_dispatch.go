@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"slices"
 	"fmt"
 	"log"
 	"strings"
@@ -127,7 +128,14 @@ func stepBlocked(s livedata.SnapStep, byID map[string]livedata.SnapStep) bool {
 	}
 	for _, id := range s.BlockedBy {
 		dep, ok := byID[id]
-		if !ok || (dep.Status != "closed" && dep.State != "done" && !dep.Superseded) {
+		if !ok {
+			// A blocker in another workstream: the snapshot lists it as done or not.
+			if !slices.Contains(s.DoneBlockers, id) {
+				return true
+			}
+			continue
+		}
+		if dep.Status != "closed" && dep.State != "done" && !dep.Superseded {
 			return true
 		}
 	}
