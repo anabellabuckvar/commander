@@ -31,3 +31,16 @@ func MarkLiveRuntimes(snap *Snapshot) {
 func projectKey(pid int64, bead string) string {
 	return strconv.FormatInt(pid, 10) + "\x00" + bead
 }
+
+// liveRuntime is the runtime of the agent running step id now, or "".
+func (b board) liveRuntime(pid int64, id string) string {
+	for _, x := range b.s.Executions {
+		if x.ProjectID == pid && (x.BeadID == id || x.TaskBeadID == id) {
+			if x.Runtime == "" {
+				return "claude"
+			}
+			return x.Runtime
+		}
+	}
+	return ""
+}

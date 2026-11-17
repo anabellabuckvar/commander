@@ -200,7 +200,7 @@ const maxChildDepth = 3
 // it in Children. The second result is the wait step's id when it split.
 func (f flow) diagramSteps(s SnapStep, w *WorkflowStep, after []string, depth int) ([]DiagramStep, string) {
 	h := f.hand(s, w.Text)
-	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who, Runtime: s.LiveRuntime,
+	st := DiagramStep{ID: s.BeadID, Title: w.Title, Kind: w.Kind, Text: w.Text, Why: w.Why, Since: w.Since, Lane: laneOfActor(h.actor), Actor: h.actor, Who: h.who, Runtime: f.b.liveRuntime(f.ws.ProjectID, s.BeadID),
 		Gate: s.Gate, Criteria: s.Criteria, After: after, Track: s.Track}
 	var out []DiagramStep
 	cur := ""

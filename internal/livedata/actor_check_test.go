@@ -87,3 +87,19 @@ func TestReviewSendBackIsNotClean(t *testing.T) {
 		t.Fatal("a passing review did not close")
 	}
 }
+
+// The board carries a Claude or Codex mark on a step only while an agent runs it.
+func TestRuntimeMarkOnlyWhileRunning(t *testing.T) {
+	ws := SnapWorkstream{BeadID: "w", Project: "p", ProjectID: 1, Steps: []SnapStep{{BeadID: "w.1", Title: "Build", Status: "open"}, {BeadID: "w.2", Title: "Next", Status: "open"}}}
+	s := snapOf(ws, idle)
+	s.Workstreams[0].ProjectID = 1
+	s.Executions = []SnapExecution{{ProjectID: 1, BeadID: "w.1", Role: "operator-x", Runtime: "codex"}}
+	d := Board(s, nowSec)
+	got := map[string]string{}
+	for _, st := range d.Workstreams[0].Diagram.Steps {
+		got[st.ID] = st.Runtime
+	}
+	if got["w.1"] != "codex" || got["w.2"] != "" {
+		t.Fatalf("marks = %v", got)
+	}
+}
