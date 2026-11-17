@@ -250,6 +250,9 @@ func run(args []string, stdout, stderr *os.File) int {
 		return runInternalShip(args[1:], stdout, stderr)
 	case "internal-slot":
 		return runInternalSlot(args[1:], stdout, stderr)
+	case "workstream-statuses":
+		// What the user's sidebar shows right now, as JSON (the block attached to his messages).
+		return runWorkstreamStatuses(args[1:], stdout, stderr)
 	case "internal-operator-guard":
 		// Claude Code PreToolUse hook on Bash for Operators: full suites only inside the build slot.
 		return runInternalOperatorGuardMain(args[1:], stdout)
