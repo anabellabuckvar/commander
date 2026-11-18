@@ -1,3 +1,5 @@
+import { PitchChoices, usePitch } from '../../renderer/src/components/PitchView'
+import { trackTitle } from '../../renderer/src/viewmodel'
 // The tree board where the app's sidebar and middle pane were: one header bar
 // split at the tree's width and one grid of rows, the tree column first, drawn
 // by board.ts from cmdrd's tree (GET /api/tree), so the tree and the board
@@ -42,6 +44,26 @@ function focusFor(sel: Selection | null, tree: Tree | null) {
   if (!top) return st.goHome()
   st.select({ kind: 'ws', key: wsKey(top) })
   if (nested && nested.id !== top.bead_id) st.openWorkflow(wsKey(top), nested.id, 'workflow')
+}
+
+/** PanelAsk: the answer choices for the step open in the board's popup, when it is a card of Eric's. */
+function PanelAsk() {
+  const sel = useTreeSelection((s) => s.sel)
+  const item = useStore((s) => (sel?.kind === 'step' ? s.snapshot?.needs_you?.find((n) => n.bead_id === sel.id) : undefined))
+  return item ? <PanelAskCard key={item.bead_id} item={item} /> : null
+}
+
+function PanelAskCard({ item }: { item: NonNullable<ReturnType<typeof useStore.getState>['snapshot']>['needs_you'][number] }) {
+  const { versions, answer } = usePitch(item)
+  if (answer) return null
+  const card = item.decision
+  const question = card?.question && card.question !== 'Approve?' ? card.question : item.title
+  const where = [item.workstream || '', item.track ? trackTitle(item.track) : ''].filter(Boolean).join(' › ')
+  return (
+    <div className="tb-panel-ask">
+      <PitchChoices item={item} question={question} where={where} version={versions.length} />
+    </div>
+  )
 }
 
 /** TreeBoard: where the app's sidebar and middle pane were, one grid: the tree column (as wide as the sidebar, resized by the app's left splitter) and the board. */
@@ -118,6 +140,7 @@ export function TreeBoard({ treeWidth, onDragTree, onDragDone }: { treeWidth: nu
         <Splitter side="left" onDrag={onDragTree} onDone={onDragDone} />
       </div>
       {slots && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, slots.linear)}
+      {slots && createPortal(<PanelAsk />, slots.inspector)}
       {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} cycles={false} />, wsSlot.el)}
       {error && (
         <p className="tb-error" role="alert">

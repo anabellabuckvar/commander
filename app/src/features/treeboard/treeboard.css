@@ -401,3 +401,8 @@
 .tb .card.norun { box-shadow: none !important; transform: none !important; border-style: dashed !important; border-width: 1.5px !important; background: var(--surface) !important }
 .tb .card.norun .own i { animation: none !important; opacity: .5 }
 .tb .card.norun .tt { font-weight: 500 }
+
+/* Eric's answer choices, in the step popup under the details (the same choices as above the chat input). */
+.tb .tb-inspector:empty { display: none }
+.tb-panel-ask { padding: 4px 18px 18px; border-top: 1px solid var(--line) }
+.tb-panel-ask .pitch-choices ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px }
