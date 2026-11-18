@@ -82,6 +82,7 @@ func (d *Daemon) runAutoAccept(ctx context.Context) {
 		applyAnswers(ctx, d.store.PendingAnswers, d.attempted, d.answerQuestion)
 		closed := closeAnsweredGates(ctx, d.store.AnsweredGates, d.tryClose, d.finishRejectedGate)
 		closed += reviseSentBackReviews(ctx, d.store.ReviewsSentBack, applySystemPlan, d.store.RerunAfterRevision)
+		closed += rerunUnblocked(ctx, d.store.BlockedResultsUnblocked, d.store.RerunAfterRevision)
 		if acceptResults(ctx, d.store.AgentResultsToAccept, d.tryClose)+closed > 0 {
 			d.store.NotifyStateChanged(ctx)
 			d.autoDispatchOnce(ctx)

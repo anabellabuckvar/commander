@@ -32,3 +32,15 @@ func TestSentBackReviewGetsItsRevision(t *testing.T) {
 		t.Fatalf("the review does not wait on its revision: %v", applied[1])
 	}
 }
+
+// vibe-apps-596t.12.14 (Nov 18) ended blocked waiting for a deploy; the Automatic
+// step in front of it closed when the deploy landed; it runs again.
+func TestBlockedStepRerunsWhenItsBlockerCloses(t *testing.T) {
+	var reran []string
+	n := rerunUnblocked(context.Background(), func(context.Context) ([]store.SentBackReview, error) {
+		return []store.SentBackReview{{ProjectID: 2, Bead: "vibe-apps-596t.12.14"}}, nil
+	}, func(_ context.Context, _ int64, bead string) error { reran = append(reran, bead); return nil })
+	if n != 1 || len(reran) != 1 || reran[0] != "vibe-apps-596t.12.14" {
+		t.Fatalf("reran %v", reran)
+	}
+}

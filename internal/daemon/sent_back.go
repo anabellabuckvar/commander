@@ -68,3 +68,23 @@ func applySystemPlan(ctx context.Context, dir string, ops [][]string) error {
 type errorString string
 
 func (e errorString) Error() string { return string(e) }
+
+// rerunUnblocked dispatches again every step whose last run ended blocked once
+// a blocker of it closed after that run: the event it waited for happened.
+func rerunUnblocked(ctx context.Context, list func(context.Context) ([]store.SentBackReview, error), rerun func(ctx context.Context, pid int64, bead string) error) int {
+	steps, err := list(ctx)
+	if err != nil {
+		log.Printf("rerun-unblocked: list: %v", err)
+		return 0
+	}
+	n := 0
+	for _, s := range steps {
+		if err := rerun(ctx, s.ProjectID, s.Bead); err != nil {
+			log.Printf("rerun-unblocked: %s: %v", s.Bead, err)
+			continue
+		}
+		log.Printf("rerun-unblocked: %s ended blocked and what it waited on has closed; it runs again", s.Bead)
+		n++
+	}
+	return n
+}

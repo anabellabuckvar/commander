@@ -92,3 +92,35 @@ func (s *Store) RerunAfterRevision(ctx context.Context, pid int64, bead string) 
  WHERE b.project_id=? AND b.id=? AND b.status IN('open','in_progress') AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running')`, pid, bead)
 	return err
 }
+
+// BlockedResultsUnblocked are agent steps whose last run ended blocked (a
+// result that is not a clean final report) and a blocker of which closed after
+// that run ended, with nothing still open in front of them: what they waited
+// for has happened (an Automatic step closed, a fix landed), so they run again.
+func (s *Store) BlockedResultsUnblocked(ctx context.Context) ([]SentBackReview, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT b.project_id,p.name,p.path,b.id,b.title,COALESCE(b.parent_id,''),'' FROM bead_tasks b JOIN projects p ON p.id=b.project_id
+WHERE b.deleted_at IS NULL AND b.status IN('open','in_progress') AND b.result_ready_at>0 AND b.result_run_id IS NOT NULL
+ AND NOT (lower(ltrim(b.result_summary)) LIKE 'final report%' AND ltrim(b.result_summary) !~* '^final report\W*(blocked|blocker|failed|fail\M|cannot|could not|unable|not done|incomplete|stopped|aborted|partial|send back|sent back|sending back|changes requested|(need|needs) (correction|changes|fixes|work)|not ready|reject)')
+ AND NOT jsonb_exists(b.labels,'gate') AND NOT jsonb_exists(b.labels,'kind:workstream') AND NOT jsonb_exists(b.labels,'hold') AND NOT jsonb_exists(b.labels,'needs-user')
+ AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(b.labels) l WHERE l='lane:you' OR l LIKE 'lane:elsewhere%' OR l LIKE 'approver:%' OR l='lane:automatic')
+ AND NOT EXISTS(SELECT 1 FROM agent_runs r WHERE r.id=b.active_run_id AND r.status='running')
+ AND NOT EXISTS(SELECT 1 FROM bead_questions q WHERE q.project_id=b.project_id AND q.bead_id=b.id AND q.blocking AND q.state='pending')
+ AND EXISTS(SELECT 1 FROM bead_dependencies d JOIN bead_tasks x ON x.project_id=d.project_id AND x.id=d.depends_on_id
+  WHERE d.project_id=b.project_id AND d.issue_id=b.id AND d.type='blocks' AND x.status='closed' AND x.updated_at::timestamptz > to_timestamp(b.result_ready_at))
+ AND NOT EXISTS(SELECT 1 FROM bead_dependencies d JOIN bead_tasks x ON x.project_id=d.project_id AND x.id=d.depends_on_id
+  WHERE d.project_id=b.project_id AND d.issue_id=b.id AND d.type='blocks' AND x.status<>'closed' AND x.deleted_at IS NULL)
+LIMIT 32`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SentBackReview
+	for rows.Next() {
+		var r SentBackReview
+		if err := rows.Scan(&r.ProjectID, &r.Project, &r.Path, &r.Bead, &r.Title, &r.Parent, &r.Summary); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
