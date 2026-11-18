@@ -329,6 +329,7 @@ type SnapStep struct {
 	Task        bool             `json:"task,omitempty"`             // an Operator task bead: agent-internal, left out of the workflow and diagram (its step shows its state)
 	Track       bool             `json:"track,omitempty"`            // a track of its workstream: a separate outcome with its own gate chain and status line
 	Automatic   bool             `json:"automatic,omitempty"`        // owned by Automatic: waits for one event and closes itself when it happens
+	NeedsUser   bool             `json:"needs_user,omitempty"`       // labelled needs-user: put to the user, whose card it is until they answer
 	// ManagerRole is set on a nested workstream that has a Manager of its own
 	// (its project's nested Managers are on): manager-<its bead>.
 	ManagerRole string       `json:"manager_role,omitempty"`
@@ -634,6 +635,7 @@ func snapSteps(nodes []*StepNode, now string, live LiveAgent, stage bool) []Snap
 		st.Viz = EffectiveViz(o, stages[o.BeadID])
 		st.Track = o.Track
 		st.Automatic = o.Automatic
+		st.NeedsUser = o.NeedsUser
 		st.Task = o.Task
 		st.NoGates = stage && len(o.Gates) == 0 && !o.Gate && o.State != beads.StateDone && o.Status != "closed" && o.Status != beads.StatusDeferred
 		if o.Track && st.NoGates {

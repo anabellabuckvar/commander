@@ -352,7 +352,7 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	}
 	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
 	// A step whose agent asked Eric something is his card until he answers.
-	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.QuestionWaiting)
+	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.QuestionWaiting || s.NeedsUser)
 	switch {
 	case s.Automatic:
 		// Automatic: no person or agent; it waits for one event and closes itself.
@@ -397,6 +397,9 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 		st.Ask = strings.TrimSpace(s.Ask)
 		if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
 			st.Ask = strings.TrimSpace(s.Decision.Question)
+		}
+		if st.Ask == "" {
+			st.Ask = strings.TrimSpace(s.ResultLine) // what its agent last said when it stopped for him
 		}
 		if st.Ask != "" {
 			return st

@@ -383,3 +383,15 @@ func TestTreeAgentQuestionIsYourCard(t *testing.T) {
 		t.Fatalf("card: %+v (needs you %d)", s, tr.NeedsYou)
 	}
 }
+
+// The same step as the store left it: a needs-user label, its result ready, no
+// card or live question; it is still Eric's card, with what its agent said.
+func TestTreeNeedsUserLabelIsYourCard(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "a", Title: "Complete", Status: "open", Steps: []SnapStep{
+		{BeadID: "a.1", Title: "Address the second review", Status: "open", Lane: "agents", State: "review", NeedsUser: true, ResultLine: "The question about whether to resume is open and blocking, so I've stopped."},
+	}}}}
+	s := BuildTree(snap, 0).Steps[0]
+	if s.Type != "you" || s.State != "active" || !strings.Contains(s.Wait, "whether to resume") {
+		t.Fatalf("card: %+v", s)
+	}
+}
