@@ -785,6 +785,11 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
   const sized = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => onResize()) : null
   sized?.observe(root)
   root.addEventListener('click', onClick)
+  // Pin the tree column while the board scrolls sideways: position: sticky doesn't hold grid items here
+  // (measured: a 300px scroll moved the tree 300px), so the tree cells are moved back by the scroll offset.
+  const graphEl = canvasEl.parentElement as HTMLElement
+  const onHScroll = () => canvasEl.style.setProperty('--sx', graphEl.scrollLeft + 'px')
+  graphEl.addEventListener('scroll', onHScroll, { passive: true })
   root.addEventListener('mouseover', onOver)
   document.addEventListener('keydown', onKey)
   qEl.addEventListener('input', onInput)
@@ -819,6 +824,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       clearInterval(timer)
       clearTimeout(qT)
       root.removeEventListener('click', onClick)
+      graphEl.removeEventListener('scroll', onHScroll)
       root.removeEventListener('mouseover', onOver)
       sized?.disconnect()
       document.removeEventListener('keydown', onKey)

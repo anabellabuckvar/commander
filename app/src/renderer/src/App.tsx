@@ -175,7 +175,18 @@ export function App() {
             {focused && !narrow && <Splitter side="right" onDrag={dragChat} onDone={save} />}
             {/* The chat's text column (messages and input) has its own cap, narrower than the
                 chat pane can grow, so a wide pane never stretches the text or the input. */}
-            <section className="col col-middle" style={{ ['--chat-col' as string]: `${Math.min((tabbed ? winW - RAIL - nav : chat) - 48, CHAT_COL_MAX)}px` }}>
+            {/* A narrow window: the chat is a popup at the bottom right, opened from the Commander button. */}
+            {tabbed && !chatTab && (
+              <button type="button" className="chat-launcher" onClick={() => useStore.getState().setChatTab(true)}>
+                Commander
+              </button>
+            )}
+            <section className="col col-middle" style={{ ['--chat-col' as string]: `${Math.min((tabbed ? 440 : chat) - 48, CHAT_COL_MAX)}px` }}>
+              {tabbed && (
+                <button type="button" className="chat-pop-close" aria-label="Close chat" onClick={() => useStore.getState().setChatTab(false)}>
+                  ×
+                </button>
+              )}
               <ChatControls />
               <SelectionChip />
               <div className="chat-slot">

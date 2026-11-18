@@ -14,14 +14,14 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
   // The middle pane is the tree board, always shown beside the chat (as in App), so the bar is always split.
   const focused = true
   const narrow = useStore((s) => s.narrow)
-  const chatTab = useStore((s) => s.chatTab)
   const target = useChatTarget()
   const chatTitle = target.title
   const model = useStore((s) => s.chats[target.role]?.model)
   const split = focused && !narrow
   // A narrow window shows one pane at a time, so it names the one on screen.
-  const showFocus = focused && (!narrow || !chatTab)
-  const showChat = !focused || !narrow || chatTab
+  // In a narrow window the chat is a popup with its own close, so the bar always names the board and only names the chat when it sits beside it.
+  const showFocus = focused
+  const showChat = !narrow
   return (
     <header className="app-top" style={{ gridTemplateColumns: split ? `${left}px minmax(0, 1fr) ${chat}px` : `${left}px minmax(0, 1fr)` }}>
       <div className="app-top-left">
