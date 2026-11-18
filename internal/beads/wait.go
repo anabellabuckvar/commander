@@ -743,3 +743,13 @@ func UserTimerLabel(label string) bool { return userTimer.MatchString(label) }
 func EventTimerLabel(label string) bool {
 	return eventTimer.MatchString(label) && !timeWindow.MatchString(label)
 }
+
+// ManagerReceiptLabel: a wait label left by the retired Managers (Manager to
+// start, plan, dispatch or close), in its parsed or its stored spelling.
+// Nothing resolves them now; they only keep a step from starting.
+func ManagerReceiptLabel(l string) bool {
+	if w, ok := ParseWaitLabel(l); ok && (IsManagerHandoff(w) || IsManagerDispatch(w) || w.Ref == ManagerPlanWait || w.Ref == ManagerStartWait) {
+		return true
+	}
+	return (strings.HasPrefix(l, WaitLabelPrefix) || strings.HasPrefix(l, compactWaitPrefix)) && strings.Contains(l, "Manager_20")
+}

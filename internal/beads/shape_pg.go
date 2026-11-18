@@ -209,7 +209,17 @@ func pgShapeGuard(ctx context.Context, q store.Querier, pid int64, ops [][]strin
 	if e != nil {
 		return e
 	}
-	bad := append(ShapeReshape(before, batch.creates, batch.referenced), ShapeNew(ShapeCheck(before), ShapeCheck(after))...)
+	var fresh []ShapeViolation
+	for _, v := range ShapeNew(ShapeCheck(before), ShapeCheck(after)) {
+		// A later stage under way beside an earlier one not started is a write's
+		// fault only when it changes that in-progress step: moving or adding
+		// other steps around it leaves its own dependencies as they were.
+		if v.Rule == "impossible-order" && len(v.Beads) == 2 && !batch.touched[v.Beads[1]] {
+			continue
+		}
+		fresh = append(fresh, v)
+	}
+	bad := append(ShapeReshape(before, batch.creates, batch.referenced), fresh...)
 	bad = append(bad, ShapeTransitions(before, after, pgCallerValue(ctx, "COMMANDER_ROLE") != "")...)
 	// Every writer is held to the numbered rules with no worsening: a write is
 	// refused when a bead newly breaks a rule, or an already broken bead breaks

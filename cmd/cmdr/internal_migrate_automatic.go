@@ -22,6 +22,7 @@ func runInternalMigrateAutomatic(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	apply := fs.Bool("apply", false, "write the moves (default: list them)")
 	only := fs.String("project", "", "one project (default: every active one)")
+	receipts := fs.Bool("clear-manager-waits", false, "instead: remove the Manager receipt waits (Manager to start / plan / dispatch / close) from open steps, so the watcher starts them")
 	if fs.Parse(args) != nil || fs.NArg() != 0 {
 		return 2
 	}
@@ -64,14 +65,24 @@ func runInternalMigrateAutomatic(args []string, stdout, stderr io.Writer) int {
 				b.Parent = b.ParentID
 			}
 			ops := beads.AutomaticStepOps(b)
+			if *receipts {
+				ops = nil
+				for _, l := range b.Labels {
+					if beads.ManagerReceiptLabel(l) {
+						ops = append(ops, []string{"update", b.ID, "--remove-label", l})
+					}
+				}
+			}
 			if len(ops) == 0 {
 				continue
 			}
 			found++
 			var waits []string
 			for _, l := range b.Labels {
-				if w, ok := beads.ParseWaitLabel(l); ok && beads.WatchableWait(w) {
+				if w, ok := beads.ParseWaitLabel(l); ok && (beads.WatchableWait(w) || *receipts) && (!*receipts || beads.ManagerReceiptLabel(l)) {
 					waits = append(waits, w.Text())
+				} else if *receipts && beads.ManagerReceiptLabel(l) {
+					waits = append(waits, l)
 				}
 			}
 			line := fmt.Sprintf("%s %s %q: %s", p.Name, b.ID, b.Title, strings.Join(waits, "; "))
@@ -96,7 +107,11 @@ func runInternalMigrateAutomatic(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, "moved "+line)
 		}
 	}
-	fmt.Fprintf(stdout, "%d steps with event waits; %d moved onto Automatic steps; %d refused\n", found, moved, refused)
+	what := "event waits; %d moved onto Automatic steps"
+	if *receipts {
+		what = "Manager receipt waits; %d cleared"
+	}
+	fmt.Fprintf(stdout, "%d steps with "+what+"; %d refused\n", found, moved, refused)
 	if refused > 0 {
 		return 1
 	}

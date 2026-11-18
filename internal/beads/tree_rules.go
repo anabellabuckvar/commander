@@ -183,7 +183,7 @@ func TreeRules(nodes []ShapeNode) []ShapeViolation {
 		}
 		if ws := n.watchableWaits(); len(ws) > 0 {
 			out = append(out, rule(14, []string{id}, fmt.Sprintf("step %q waits for %s; only an Automatic step waits", n.Title, ws[0].Text()),
-				fmt.Sprintf("put the wait on its own Automatic step before %s (create owner automatic with for, then link %s after it) and clear it from %s", id, id, id)))
+				fmt.Sprintf("add an Automatic step before it: a create edit with \"owner\": \"automatic\" and \"for\": the event, then link %s after it; do not put the wait on %s", id, id)))
 		}
 		owners := n.laneOwners()
 		if len(owners) > 1 {

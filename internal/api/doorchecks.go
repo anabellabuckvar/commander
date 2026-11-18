@@ -130,9 +130,8 @@ func refuseWorkstreamClose(ctx context.Context, bc beads.Client, dir, id string)
 		logDoorFailOpen(dir, id, "read bead", err)
 		return nil
 	}
-	if beads.IsWorkstream(b.Labels) {
-		return fmt.Errorf("%s is a workstream and only the user marks a workstream done: put a card on it asking them to confirm it is done, and leave it open", id)
-	}
+	// A workstream closes once its children are done or superseded (rule 26,
+	// checked on every write): no card is needed for that.
 	if beads.IsClosingGate(b.Labels) {
 		if b.HumanAnswerPending {
 			return nil // applying the user's own recorded answer (their click, or their words relayed with provenance)

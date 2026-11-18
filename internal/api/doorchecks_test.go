@@ -74,8 +74,9 @@ func TestDoorChecks(t *testing.T) {
 		{"review wait with another pr label left allowed", []string{agent}, []string{"update", "b-1", "--remove-label", "pr:7", "--add-label", "waiting:1700000000:review:bob"}, &beads.Bead{ID: "b-1", Labels: []string{"pr:7", "pr:8"}}, nil, nil, ""},
 		{"ci wait allowed", []string{agent}, []string{"update", "b-1", "--add-label", "waiting:1700000000:ci:8"}, open, nil, nil, ""},
 		{"user exempt", nil, []string{"update", "b-1", "--add-label", "waiting:soon"}, open, nil, nil, ""},
-		{"agent closing a workstream refused", []string{agent}, []string{"close", "b-1", "--reason", "done"}, &beads.Bead{ID: "b-1", Labels: []string{beads.WorkstreamLabel}}, nil, nil, "only the user marks a workstream done"},
-		{"agent closing a nested workstream refused", []string{agent}, []string{"update", "b-1", "--status", "closed"}, &beads.Bead{ID: "b-1", Labels: []string{beads.TrackLabel}}, nil, nil, "only the user marks a workstream done"},
+		// A workstream with no open children closes without a card (rule 26 refuses one with open children).
+		{"agent closing a finished workstream allowed", []string{agent}, []string{"close", "b-1", "--reason", "done"}, &beads.Bead{ID: "b-1", Labels: []string{beads.WorkstreamLabel}}, nil, nil, ""},
+		{"agent closing a finished nested workstream allowed", []string{agent}, []string{"update", "b-1", "--status", "closed"}, &beads.Bead{ID: "b-1", Labels: []string{beads.TrackLabel}}, nil, nil, ""},
 		{"agent closing a step allowed", []string{agent}, []string{"close", "b-1"}, open, nil, nil, ""},
 		{"agent closing a Confirm done step refused", []string{agent}, []string{"close", "b-1"}, &beads.Bead{ID: "b-1", Labels: []string{beads.GateLabel, beads.ClosingGateLabel}}, nil, nil, "only the user confirms it"},
 		{"card on a Confirm done step refused", []string{agent}, []string{"update", "b-1", "--add-label", beads.NeedsUserLabel}, &beads.Bead{ID: "b-1", Labels: []string{beads.GateLabel, beads.ClosingGateLabel}}, nil, nil, "never gets a card"},
