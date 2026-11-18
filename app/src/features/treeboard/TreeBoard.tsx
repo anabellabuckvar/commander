@@ -11,7 +11,6 @@ import { createPortal } from 'react-dom'
 import { create } from 'zustand'
 import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
 import { askKey, board as boardVM, wsKey } from '../../renderer/src/viewmodel'
-import { InspectorColumn } from '../../renderer/src/components/InspectorColumn'
 import { host } from '../../renderer/src/host'
 import { useStore } from '../../renderer/src/store'
 import { linearUrl } from '../linear/Ticket'
@@ -65,7 +64,6 @@ export function TreeMain() {
   const sideEl = useSidePane((s) => s.el)
   const board = useRef<Board | null>(null)
   const tree = useRef<Tree | null>(null)
-  const sel = useTreeSelection((s) => s.sel)
   const [error, setError] = useState('')
   const [ready, setReady] = useState(0)
   const cfg = useStore((s) => s.config)
@@ -132,7 +130,6 @@ export function TreeMain() {
       <div className="tb tb-main" ref={ref} />
       {slots && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, slots.linear)}
       {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} cycles={false} />, wsSlot.el)}
-      {slots && sel && createPortal(<InspectorColumn hideOverview />, slots.inspector)}
       {error && (
         <p className="tb-error" role="alert">
           Board unavailable: {error}
