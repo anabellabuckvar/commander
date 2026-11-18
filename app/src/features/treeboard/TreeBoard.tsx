@@ -101,6 +101,7 @@ export function TreeBoard({ treeWidth, onDragTree, onDragDone }: { treeWidth: nu
         if (!live) return
         setError('')
         tree.current = t
+        useTreeSelection.setState({ running: t.steps.filter((s) => !!s.run).length })
         board.current?.update(t)
       },
       (e) => live && setError(e instanceof Error ? e.message : String(e)),

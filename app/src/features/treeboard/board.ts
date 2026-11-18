@@ -244,7 +244,8 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
     el.tabIndex = 0
     el.dataset.id = n.id
     const live = n.state === 'active' && (n.type === 'agent' || n.type === 'review') && !!n.run
-    el.className = `card t-${n.type} s-${n.state}` + (filtersOn() && cardDim(n) ? ' fdim' : '') + (cardHit(n) ? ' hit' : '') + (live ? ' run' : n.asleep ? ' asleep' : '')
+    const norun = n.state === 'active' && (n.type === 'agent' || n.type === 'review') && !n.run && !n.asleep
+    el.className = `card t-${n.type} s-${n.state}` + (filtersOn() && cardDim(n) ? ' fdim' : '') + (cardHit(n) ? ' hit' : '') + (live ? ' run' : n.asleep ? ' asleep' : norun ? ' norun' : '')
     el.innerHTML =
       `<span class="own">${n.type === 'automatic' ? CLOCK : '<i></i>'}${esc(n.own)}${n.state === 'active' ? timerHtml(n) : ''}</span><span class="tt">${esc(n.title)}</span>` + (n.wt ? `<span class="wt">${esc(n.wt)}</span>` : '')
     el.title = n.title

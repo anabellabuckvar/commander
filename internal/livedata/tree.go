@@ -784,12 +784,11 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 		case strings.HasPrefix(s.Text, "Waiting"), strings.HasPrefix(s.Text, "Stuck"), s.Text == "State missing", strings.HasPrefix(s.Text, "Invalid"):
 			s.Wait = s.Text
 		case agentish:
-			// No live agent on an active agent step: say what the step's own status says (e.g. the last agent
-			// ended blocked), never a made-up "queued" line. The watcher starts the next agent.
-			if s.Text != "" {
-				s.Wait = s.Text
-			} else {
-				s.Wait = "No agent on it yet; the watcher starts one"
+			// No live agent on an active agent step: say exactly that (the card must never look like work),
+			// with the step's own status as the reason.
+			s.Wait = "No agent running"
+			if r := strings.TrimSpace(s.Text); r != "" && r != "Agent working" {
+				s.Wait += ": " + r
 			}
 		}
 	case s.State == "notstarted":

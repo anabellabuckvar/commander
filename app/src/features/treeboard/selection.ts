@@ -7,7 +7,8 @@ import { create } from 'zustand'
 import type { Selection } from './types'
 
 /** useTreeSelection: what the board has open, and how to close it (the chip's ×). */
-export const useTreeSelection = create<{ sel: Selection | null; clear: (() => void) | null }>(() => ({ sel: null, clear: null }))
+/** running: agents actually running now, counted from the same tree the board draws (one source for the rail). */
+export const useTreeSelection = create<{ sel: Selection | null; clear: (() => void) | null; running: number | null }>(() => ({ sel: null, clear: null, running: null }))
 
 export function setTreeSelection(sel: Selection | null): void {
   useTreeSelection.setState({ sel })

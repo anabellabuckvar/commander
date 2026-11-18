@@ -1,3 +1,4 @@
+import { useTreeSelection } from '../../../features/treeboard/selection'
 // Rail is the thin column down the left of the window, on the background: the
 // pages (Home, Progress), then how many agents are working, and at the bottom
 // the health and update alerts, the Settings gear, and who the app is for.
@@ -54,7 +55,10 @@ export function Rail() {
     }, () => {})
     return () => { active = false }
   }, [config])
-  const working = useAgentRows().filter((r) => r.state === 'working').length
+  const agentRowsWorking = useAgentRows().filter((r) => r.state === 'working').length
+  // The board's live runs (Commander's record of running agents) are the one source; agent rows only before the tree loads.
+  const treeRunning = useTreeSelection((s) => s.running)
+  const working = treeRunning ?? agentRowsWorking
   const home = useStore((s) => homeActive(s.selected))
   const progress = useStore((s) => s.selected.kind === 'progress')
   const workflows = useStore((s) => s.selected.kind === 'workflows')

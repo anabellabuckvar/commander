@@ -396,3 +396,8 @@
 .tb .own .clock { flex: none; color: var(--auto) }
 .tb .d-automatic { background: var(--auto) } .tb .c-automatic { color: var(--auto-ink) } .tb .c-automatic i { background: var(--auto) }
 .tb .sw.slate { background: var(--auto-bg); box-shadow: inset 0 0 0 2px var(--auto) }
+
+/* An agent step with no agent actually running: flat, no pulse, dashed edge, never styled as work. */
+.tb .card.norun { box-shadow: none !important; transform: none !important; border-style: dashed !important; border-width: 1.5px !important; background: var(--surface) !important }
+.tb .card.norun .own i { animation: none !important; opacity: .5 }
+.tb .card.norun .tt { font-weight: 500 }
