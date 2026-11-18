@@ -1,6 +1,7 @@
 package beads
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -75,17 +76,23 @@ func TestTreeTransitions(t *testing.T) {
 	noReason := step("W.1.2", "W.1", "Old way", "lane:agents", "superseded")
 	noReason.Status, noReason.CloseReason = "closed", "Superseded:"
 	after := []ShapeNode{closedWS, step("W.1.1", "W.1", "Build", "lane:agents"), noReason}
-	got := numbersOf(TreeTransitions(before, after))
+	got := numbersOf(TreeTransitions(before, after, nil))
 	if got[26] != 1 || got[27] != 1 {
 		t.Fatalf("got %v", got)
 	}
 	withReason := noReason
 	withReason.CloseReason = "Superseded: replaced by W.1.1"
-	if vs := TreeTransitions(before, []ShapeNode{before[0], before[1], withReason}); len(vs) != 0 {
+	if vs := TreeTransitions(before, []ShapeNode{before[0], before[1], withReason}, nil); len(vs) != 0 {
 		t.Fatalf("a superseded step with a reason refused: %+v", vs)
 	}
-	if vs := planDeletes([][]string{{"delete", "W.1.2"}}); len(vs) != 1 || vs[0].Number != 27 {
+	if vs := TreeTransitions(before, after[1:], reasonedBeads([][]string{{"update", "W.1.2", "--add-label", "superseded"}, {"comments", "add", "W.1.2", "replaced by the new cutover"}})); len(vs) != 0 {
+		t.Fatalf("a supersede whose reason rides in the same write refused: %+v", vs)
+	}
+	if vs := planDeletes([][]string{{"delete", "W.1.2"}}, before); len(vs) != 1 || vs[0].Number != 27 {
 		t.Fatalf("delete not refused: %+v", vs)
+	}
+	if vs := planDeletes([][]string{{"delete", "T"}}, []ShapeNode{step("T", "W.1.1", "operator task", "kind:task")}); len(vs) != 0 {
+		t.Fatalf("an internal bead's delete refused: %+v", vs)
 	}
 }
 
@@ -103,6 +110,13 @@ func TestShapeViolationsCarryRuleNumbers(t *testing.T) {
 }
 
 func TestCompileTreeEdits(t *testing.T) {
+	top, e := CompileTreeEdits([]TreeEdit{{Op: "create", Kind: "workstream", Title: "Release 3", Ref: "r3"}, {Op: "create", Parent: "$r3", Title: "Plan release 3", Owner: "implementer"}})
+	if e != nil || strings.Join(top[0], " ") != "create Release 3 --labels kind:workstream --ref r3 --silent" || top[1][3] != "$r3" {
+		t.Fatalf("top-level workstream: %v %v", top, e)
+	}
+	if _, e := CompileTreeEdits([]TreeEdit{{Op: "create", Title: "Loose step", Owner: "you", Criteria: "x"}}); e == nil {
+		t.Fatal("a step with no parent was accepted")
+	}
 	ops, e := CompileTreeEdits([]TreeEdit{
 		{Op: "create", Parent: "W", Kind: "workstream", Title: "Phase 2", Ref: "p2", Criteria: "Phase 2 notices go through Notify"},
 		{Op: "create", Parent: "$p2", Title: "Build phase 2", Owner: "implementer", Ref: "b"},
@@ -167,5 +181,48 @@ func TestCompileTreeEdits(t *testing.T) {
 	}
 	if _, e := CompileTreeEdits([]TreeEdit{{Op: "create", Parent: "W", Title: "Mine", Owner: "commander"}}); e == nil || !strings.Contains(e.Error(), "rule 10") {
 		t.Errorf("commander owner: %v", e)
+	}
+}
+
+// Every writer, not only a plan, is held to the numbered rules with no
+// worsening: a new break is refused, an old one left as it was is not.
+func TestPostgresEveryWriteRefusesOnlyNewBreaks(t *testing.T) {
+	c, dir, _ := postgresBeads(t)
+	t.Setenv("CMDR_SHAPE_CHECK", "0") // the fixture: an empty workstream alone breaks rule 2
+	ctx := context.Background()
+	if e := c.Init(ctx, dir); e != nil {
+		t.Fatal(e)
+	}
+	mk := func(title, parent string, labels ...string) string {
+		t.Helper()
+		id, e := c.Create(ctx, dir, title, CreateOptions{Parent: parent, Labels: labels, Silent: true})
+		if e != nil {
+			t.Fatal(e)
+		}
+		return id
+	}
+	brief := []string{"--description", "Do it.", "--acceptance", "It is done."}
+	root := mk("Workstream", "", "kind:workstream")
+	nested := mk("Nested", root, "kind:workstream")
+	t.Setenv("CMDR_SHAPE_CHECK", "1")
+	if resp := postgresApplyOps(ctx, dir, [][]string{append([]string{"create", "Build it", "--parent", nested, "--labels", "kind:objective,lane:agents", "--assignee", "operator-x", "--silent"}, brief...)}); resp.Exit != 0 {
+		t.Fatalf("valid step refused: %+v", resp)
+	}
+	// A step straight under a workstream that holds a workstream: a new break of rule 3.
+	resp := postgresApplyOps(ctx, dir, [][]string{append([]string{"create", "Loose step", "--parent", root, "--labels", "kind:objective,lane:agents", "--assignee", "operator-x", "--silent"}, brief...)})
+	if resp.Exit == 0 || !strings.Contains(resp.Error, "[rule 3]") {
+		t.Fatalf("a raw write that mixes a workstream was not refused with rule 3: %+v", resp)
+	}
+	// A tree that already breaks rule 3 (written with the check off) still takes
+	// writes that leave the break as it was.
+	t.Setenv("CMDR_SHAPE_CHECK", "0")
+	loose := mk("Loose step", root, "kind:objective", "lane:agents")
+	t.Setenv("CMDR_SHAPE_CHECK", "1")
+	if resp := postgresApplyOps(ctx, dir, [][]string{{"update", loose, "--title", "Loose step, renamed"}}); resp.Exit != 0 {
+		t.Fatalf("a write that leaves an old break unchanged was refused: %+v", resp)
+	}
+	// ...but not one that adds a second break to the same bead (rule 7: two owners).
+	if resp := postgresApplyOps(ctx, dir, [][]string{{"update", loose, "--add-label", "lane:you"}}); resp.Exit == 0 || !strings.Contains(resp.Error, "[rule 7]") {
+		t.Fatalf("a new break on an already broken bead was not refused: %+v", resp)
 	}
 }

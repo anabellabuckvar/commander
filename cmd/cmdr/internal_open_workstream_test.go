@@ -83,7 +83,7 @@ func TestOpenWorkstream_RequiresFlagsAndReportsErrors(t *testing.T) {
 	}
 }
 
-func TestCreateObjective_NewWorkstreamGetsAManagerButAStepDoesNot(t *testing.T) {
+func TestCreateObjective_StartsNoManager(t *testing.T) {
 	f := &fakeOpener{}
 	useOpener(t, f)
 	mock := &beads.MockClient{CreateID: "obj-9"}
@@ -93,8 +93,8 @@ func TestCreateObjective_NewWorkstreamGetsAManagerButAStepDoesNot(t *testing.T) 
 	if code := runInternalCreateObjective([]string{"--project", "manifest", "--title", "A new workstream"}, stdout, stderr); code != 0 {
 		t.Fatalf("exit=%d", code)
 	}
-	if len(f.opened) != 1 || f.opened[0] != "manifest/obj-9" {
-		t.Fatalf("a new workstream should get its Manager: %v", f.opened)
+	if len(f.opened) != 0 {
+		t.Fatalf("there are no Managers: a new workstream starts none: %v", f.opened)
 	}
 
 	f.opened = nil

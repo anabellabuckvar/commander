@@ -39,6 +39,8 @@ export interface TreeStep {
   col: number
   run?: string
   model?: string
+  /** the exact model id the live run was launched with */
+  model_id?: string
   asleep?: boolean
   own: string
   wt?: string

@@ -22,6 +22,7 @@ type SnapExecution struct {
 	RunID           int64  `json:"run_id,omitempty"`
 	SessionID       string `json:"session_id,omitempty"`
 	Runtime         string `json:"runtime,omitempty"`   // claude or codex
+	Model           string `json:"model,omitempty"`     // the model id its run was launched with
 	ActiveAt        int64  `json:"active_at,omitempty"` // its agent's last hook or tool event
 }
 

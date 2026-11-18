@@ -252,3 +252,34 @@ func TestSummariesFromTheBoardsFacts(t *testing.T) {
 		t.Fatalf("a summary naming the Commander was kept: %v", d.Summaries)
 	}
 }
+
+func TestModelName(t *testing.T) {
+	for _, c := range [][3]string{
+		{"claude", "anthropic/claude-sonnet-5-5", "Sonnet 5.5"},
+		{"claude", "claude-opus-5-5", "Opus 5.5"},
+		{"codex", "gpt-5-codex", "GPT-5 Codex"},
+		{"codex", "gpt-6.1-sol", "GPT-6.1 Sol"},
+		{"codex", "codex:gpt-5-codex", "GPT-5 Codex"},
+		{"claude", "", "Claude"},
+		{"codex", "", "Codex"},
+	} {
+		if got := ModelName(c[0], c[1]); got != c[2] {
+			t.Errorf("ModelName(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
+		}
+	}
+}
+
+// A running step's card names the model its run records; with none it names the runtime.
+func TestTreeShowsTheRunsModel(t *testing.T) {
+	snap := treeSnapshot()
+	snap.Executions = []SnapExecution{{Role: "operator-x", State: "working", BeadID: "w1.1.2", TaskBeadID: "w1.1.2", Runtime: "claude", Model: "anthropic/claude-opus-5-5"}}
+	tr := BuildTree(snap, snap.GeneratedAt.Unix())
+	for _, s := range tr.Steps {
+		if s.ID == "w1.1.2" && (s.Own != "Implementer agent · Opus 5.5" || s.ModelID != "anthropic/claude-opus-5-5") {
+			t.Fatalf("card: %+v", s)
+		}
+	}
+	if text := tr.Text(snap.GeneratedAt.Unix()); !strings.Contains(text, "[Implementer agent · Opus 5.5] Build the cutover and open its PR") {
+		t.Fatalf("the Commander's read lacks the model:\n%s", text)
+	}
+}

@@ -14,9 +14,13 @@ export interface BoardOptions {
   onChat(): void
   linearUrl(id: string): string | null
   openUrl(url: string): void
+  /** onPanel: the workstream panel was drawn; slot is where its Linear progress goes (null for a step). */
+  onPanel?(slot: HTMLElement | null, row: TreeRow | null): void
 }
 
 export interface Board {
+  /** linearSlot is the sidebar header's place for the Linear progress bar. */
+  linearSlot: HTMLElement
   update(tree: Tree): void
   destroy(): void
   /** clear closes the panel, as Close or Escape do. */
@@ -54,6 +58,7 @@ const SHELL = `
       <span data-tb="ring"></span>
       <div class="ab-id"><div class="ab-name">Workstreams</div><div class="ab-sub" data-tb="sub"></div></div>
       <button type="button" class="needbtn" data-tb="need" aria-pressed="false" title="Show only what needs you"><i></i><span data-tb="needN"></span> need you</button>
+      <div class="tb-linear" data-tb="linear"></div>
     </div>
     <div class="ab-main" role="search">
       <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input data-tb="q" type="search" placeholder="Search workstreams and steps" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
@@ -502,9 +507,11 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       const t = canvasEl.querySelector(`.tree[data-ws="${cssEscape(wsSel as string)}"]`)
       if (t) t.classList.add('wsel')
       panelEl.innerHTML = wsPanel(rowsById[wsSel as string])
+      opts.onPanel?.(panelEl.querySelector<HTMLElement>('[data-tb="wslinear"]'), rowsById[wsSel as string])
       return
     }
     panelEl.innerHTML = stepPanel(byId[sel])
+    opts.onPanel?.(null, null)
   }
 
   // ---------- right panel ----------
@@ -572,6 +579,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       `<h2>${esc(row.title)}</h2>` +
       (done ? `<p class="lead done">${esc(row.now ?? '✓ Completed')}</p>` : row.sum ? `<p class="lead">${esc(row.sum)}</p>` : '') +
       acBlock(row, false) +
+      '<div class="tb-linear-ws" data-tb="wslinear"></div>' +
       (nowHtml || idle ? `<div class="sec"><b>Now</b>${nowHtml}${idle}</div>` : '') +
       (nextHtml ? `<div class="sec"><b>Next</b>${nextHtml}</div>` : '') +
       (parent
@@ -601,6 +609,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       (ub.length
         ? `<div class="sec"><b>Then${open(n) && openDown > ub.length ? ` <span class="cnt">unblocks ${openDown} steps in all</span>` : ''}</b><div class="plist">${ub.map((x) => stepRow(x, other(x))).join('')}</div></div>`
         : '') +
+      (n.model && n.state === 'active' ? `<div class="sec"><b>Agent</b><p>${esc(n.owner)} · ${esc(n.model)}${n.model_id ? ` <code>${esc(n.model_id)}</code>` : ' (model not recorded)'}</p></div>` : '') +
       `<details class="more"><summary>Details</summary><div class="fine">${open(n) && n.text ? `<p><b>Status in the data</b> ${esc(n.text)}</p>` : ''}<p><code>${esc(n.id)}</code></p></div></details>`
     )
   }
@@ -778,6 +787,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
   route('graph')
 
   return {
+    linearSlot: $('linear'),
     update(t: Tree) {
       setTree(t)
       render()

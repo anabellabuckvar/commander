@@ -3,11 +3,16 @@ package livedata
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"unicode"
+
+	"github.com/example-user/commander/internal/agentrt"
 )
 
 // Tree is the workstream board as the app's tree view draws it and the
@@ -71,9 +76,11 @@ type TreeStep struct {
 	Owner string `json:"owner"` // You, Implementer agent, Review agent, or the person or team
 	State string `json:"state"` // active | notstarted | done
 	// Col is its column: 0 Now, 1 Next, n "n steps out"; done steps are -1.
-	Col      int    `json:"col"`
-	Run      string `json:"run,omitempty"`   // claude or codex while a live agent is on it
-	Model    string `json:"model,omitempty"` // that agent's runtime, as shown
+	Col   int    `json:"col"`
+	Run   string `json:"run,omitempty"`   // claude or codex while a live agent is on it
+	Model string `json:"model,omitempty"` // that agent's model as shown ("Opus 5.5"), or its runtime ("Claude") when the model is not known
+	// ModelID is the exact model id its run was launched with ("anthropic/claude-sonnet-5-5", "gpt-5-codex").
+	ModelID  string `json:"model_id,omitempty"`
 	Asleep   bool   `json:"asleep,omitempty"`
 	Own      string `json:"own"`          // the card's owner line
 	Wait     string `json:"wt,omitempty"` // the card's second line
@@ -91,7 +98,51 @@ var (
 	treeTicketID    = regexp.MustCompile(`[A-Z][A-Z0-9]{1,9}-\d{1,6}`)
 )
 
-var treeModel = map[string]string{"claude": "Claude", "codex": "Codex"}
+var runtimeName = map[string]string{"claude": "Claude", "codex": "Codex"}
+
+// ModelName is how a model id shows: "Opus 5.5" for a Claude model, "GPT-5
+// Codex" for a Codex one. An unknown model shows its runtime ("Claude").
+func ModelName(runtime, id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		if n := runtimeName[runtime]; n != "" {
+			return n
+		}
+		return "Agent"
+	}
+	if strings.HasPrefix(id, "codex:") {
+		runtime, id = "codex", strings.TrimPrefix(id, "codex:")
+	}
+	if runtime == "codex" || strings.HasPrefix(id, "gpt") || strings.HasPrefix(id, "o3") || strings.HasPrefix(id, "o4") {
+		// gpt-5-codex reads "GPT-5 Codex": the family and its version joined, then words.
+		parts := strings.Split(id, "-")
+		name := strings.ToUpper(parts[0])
+		rest := parts[1:]
+		if len(rest) > 0 && rest[0] != "" && unicode.IsDigit(rune(rest[0][0])) {
+			name, rest = name+"-"+rest[0], rest[1:]
+		}
+		for _, p := range rest {
+			if p != "" {
+				name += " " + strings.ToUpper(p[:1]) + p[1:]
+			}
+		}
+		return name
+	}
+	if d := agentrt.ModelDisplay(id); d != "" {
+		return d
+	}
+	return id
+}
+
+var unknownModels sync.Map
+
+// noteUnknownModel logs, once per step, a live run whose model is not recorded:
+// the card shows its runtime instead, never a guess.
+func noteUnknownModel(step, runtime string) {
+	if _, seen := unknownModels.LoadOrStore(step+"|"+runtime, true); !seen {
+		log.Printf("tree: step %s has a live %s agent with no recorded model (no agent_runs.execution_model for its run, or the run predates it): showing the runtime", step, runtime)
+	}
+}
 
 // treeTitle splits a title's trailing bracket of ticket ids off: the ids show as links.
 func treeTitle(t string) (string, []string) {
@@ -118,7 +169,7 @@ func criteriaList(s string) []string {
 type treeBuild struct {
 	t       *Tree
 	diagram map[string]DiagramStep
-	live    map[string]string // bead id -> runtime of a live agent on it
+	live    map[string]SnapExecution // bead id -> the live agent run on it
 	rows    map[string]*TreeRow
 	steps   map[string]*TreeStep
 	kids    map[string][]string // row -> child rows
@@ -136,7 +187,7 @@ func BuildTree(snap Snapshot, now int64) Tree {
 	if !snap.GeneratedAt.IsZero() {
 		t.AsOf = snap.GeneratedAt.Unix()
 	}
-	b := treeBuild{t: &t, diagram: map[string]DiagramStep{}, live: map[string]string{}, rows: map[string]*TreeRow{}, steps: map[string]*TreeStep{},
+	b := treeBuild{t: &t, diagram: map[string]DiagramStep{}, live: map[string]SnapExecution{}, rows: map[string]*TreeRow{}, steps: map[string]*TreeStep{},
 		kids: map[string][]string{}, own: map[string][]string{}, leaves: map[string][]string{}, blocked: map[string][]string{}, paused: map[string]bool{}, closed: map[string]bool{}, summary: map[string]string{}}
 	if snap.Display != nil {
 		var walk func([]DiagramStep)
@@ -164,8 +215,8 @@ func BuildTree(snap Snapshot, now int64) Tree {
 			continue
 		}
 		for _, id := range []string{x.BeadID, x.TaskBeadID} {
-			if id != "" && b.live[id] == "" {
-				b.live[id] = x.Runtime
+			if _, seen := b.live[id]; id != "" && !seen {
+				b.live[id] = x
 			}
 		}
 	}
@@ -307,8 +358,11 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 		if st.Run == "" {
 			st.Run = s.LiveRuntime
 		}
-		if st.Run == "" {
-			st.Run = b.live[s.BeadID]
+		if x, ok := b.live[s.BeadID]; ok {
+			if st.Run == "" {
+				st.Run = x.Runtime
+			}
+			st.ModelID = x.Model
 		}
 		if st.Run == "" && kind == "working" && actor == "operators" {
 			st.Run = "agent"
@@ -600,7 +654,12 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 		rt = s.Run
 	}
 	if rt != "" {
-		s.Model = treeModel[rt]
+		s.Model = ModelName(rt, s.ModelID)
+		if s.ModelID == "" {
+			noteUnknownModel(s.ID, rt)
+		}
+	} else {
+		s.ModelID = ""
 	}
 	s.Asleep = rt == "" && s.State == "active" && s.Type == "agent" && treeWaitText.MatchString(s.Text)
 	own := s.Owner

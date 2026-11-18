@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/beads"
-	"github.com/example-user/commander/internal/wsmgr"
 )
 
 var newBeadsClientFn = beads.New
@@ -323,21 +322,8 @@ func runInternalCreateObjective(args []string, stdout, stderr *os.File) int {
 		}
 	}
 
-	// Every workstream has a Manager: a new top-level objective gets one now, and
-	// so does a nested one while the project's nested Managers are on.
-	if *track && *parent != "" {
-		startNestedManager(ctx, bc, project.Name, project.Path, beadID, warn)
-	}
-	if *parent == "" {
-		if opener, cleanup, err := newWorkstreamOpener(); err != nil {
-			warn(fmt.Sprintf("its Manager could not start: %v", err))
-		} else {
-			if _, err := opener.Open(ctx, project.Name, beadID, wsmgr.OpenOptions{}); err != nil {
-				warn(fmt.Sprintf("its Manager could not start: %v", err))
-			}
-			cleanup()
-		}
-	}
+	// There are no Managers: a new workstream starts none. The system starts an
+	// agent on each of its steps.
 
 	if err := json.NewEncoder(stdout).Encode(internalCreateObjectiveResult{
 		Project:  project.Name,
@@ -502,8 +488,8 @@ func birthKind(gate, operational, scope bool) int {
 func birthHolder(kind int, title string, waitings stringList, owner string, blockedBy []string, now time.Time) ([]string, error) {
 	switch kind {
 	case birthScope:
-		w := beads.Wait{Kind: beads.WaitUntil, Since: now, Until: now.Add(2 * time.Minute), Ref: beads.ManagerPlanWait}
-		return []string{w.Label()}, nil
+		// A workstream has no owner and waits on nothing (rules 6, 14): its first steps hold it.
+		return nil, nil
 	case birthGate, birthOperational:
 		if len(waitings) > 0 || owner != "" {
 			return nil, fmt.Errorf("--waiting and --owner give a plain step its holder; a gate or an operational bead needs neither")

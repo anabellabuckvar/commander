@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/example-user/commander/internal/agentmail"
+	"github.com/example-user/commander/internal/agentrt"
 	"github.com/example-user/commander/internal/api"
 	"github.com/example-user/commander/internal/beads"
 	"github.com/example-user/commander/internal/chat"
@@ -191,6 +192,10 @@ func TestClaimedExecutionUsesRealNativeHostAndRecoversCommittedStartup(t *testin
 			liveSnapshot := source.Snapshot(ctx)
 			if liveSnapshot.Degraded != nil || len(liveSnapshot.Executions) != 1 || liveSnapshot.Executions[0].RunID != result.RunID || liveSnapshot.Executions[0].State != store.AgentWorking {
 				t.Fatalf("real host missing from snapshot: %+v degraded=%+v", liveSnapshot.Executions, liveSnapshot.Degraded)
+			}
+			// The run records the exact model it was launched with, and the board reads it.
+			if want := agentrt.Model(agentrt.TierOperator); want == "" || run.ExecutionModel != want || liveSnapshot.Executions[0].Model != want {
+				t.Fatalf("spawned run's model: recorded %q, snapshot %q, launched with %q", run.ExecutionModel, liveSnapshot.Executions[0].Model, want)
 			}
 			recordRaw, e := os.ReadFile(filepath.Join(fakeDir, "argv-"+result.SessionID+".json"))
 			if e != nil {

@@ -3,7 +3,10 @@
 // snapshot version moves. Below the right panel sits the Commander's chat: what
 // Eric has open rides along with each message (selection.ts).
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
+import { board as boardVM } from '../../renderer/src/viewmodel'
 import { ChatSlot } from '../../renderer/src/components/ChatSlot'
 import { host } from '../../renderer/src/host'
 import { useStore } from '../../renderer/src/store'
@@ -12,7 +15,7 @@ import { useIntegrations } from '../linear/settings'
 import { mountBoard, type Board } from './board'
 import { setBoardMode } from './mode'
 import { setTreeSelection } from './selection'
-import type { Selection, Tree } from './types'
+import type { Selection, Tree, TreeRow } from './types'
 import './treeboard.css'
 
 export async function fetchTree(apiUrl: string, token: string): Promise<Tree> {
@@ -29,6 +32,16 @@ export function TreeBoard() {
   const [error, setError] = useState('')
   const cfg = useStore((s) => s.config)
   const version = useStore((s) => s.snapshot?.version ?? 0)
+  const snapshot = useStore((s) => s.snapshot)
+  // The Linear progress card, as the classic sidebar shows it: the whole cycle in the header,
+  // and a top-level workstream's own tickets in its panel.
+  const progress = useMemo(() => progressWorkstreams(snapshot?.workstreams ?? [], snapshot?.display ? boardVM(snapshot).workstreams : []), [snapshot])
+  const [linearSlot, setLinearSlot] = useState<HTMLElement | null>(null)
+  const [wsSlot, setWsSlot] = useState<{ el: HTMLElement; row: TreeRow } | null>(null)
+  const openProgress = () => {
+    setBoardMode('classic')
+    useStore.getState().select({ kind: 'progress' })
+  }
 
   useEffect(() => {
     // The chat below the panel is the Commander's.
@@ -48,8 +61,10 @@ export function TreeBoard() {
         if (host?.webview) host.webview.openExternal(url)
         else window.open(url, '_blank', 'noopener,noreferrer')
       },
+      onPanel: (el, row) => setWsSlot(el && row && !row.parent ? { el, row } : null),
     })
     board.current = b
+    setLinearSlot(b.linearSlot)
     return () => {
       setTreeSelection(null)
       b.destroy()
@@ -79,6 +94,8 @@ export function TreeBoard() {
   return (
     <div className="tb-root">
       <div className="tb" ref={ref} />
+      {linearSlot && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} />, linearSlot)}
+      {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} />, wsSlot.el)}
       {error && (
         <p className="tb-error" role="alert">
           Board unavailable: {error}

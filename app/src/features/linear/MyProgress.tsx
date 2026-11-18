@@ -81,8 +81,9 @@ export function StatusRing({ issue, size = 14 }: { issue: Pick<LinearIssue, 'sta
 }
 
 /** sprintStats is everything the card and the popup say, from the cycle and the workstreams that name its tickets. */
-export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstream[], cycle: { start?: string; end?: string } | null | undefined, now: number, timeZone?: string, teams?: TeamSprint[]) {
-  const rows = progressRows(issues, workstreams, ticketIds)
+export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstream[], cycle: { start?: string; end?: string } | null | undefined, now: number, timeZone?: string, teams?: TeamSprint[], only?: string) {
+  // only: the tickets of one workstream (its own and its tracks')
+  const rows = progressRows(issues, workstreams, ticketIds).filter((r) => !only || r.workstreams.some((w) => w.key === only))
   const on = (r: ProgressRow) => r.worked
   const live = rows.filter((r) => !isCanceled(r.issue))
   const open = live.filter((r) => !isDone(r.issue))
@@ -117,7 +118,7 @@ export function sprintStats(issues: LinearIssue[], workstreams: ProgressWorkstre
 }
 
 /** useSprintStats reads the sprint and its numbers, for the card and the page. */
-function useSprintStats(workstreams: ProgressWorkstream[]) {
+function useSprintStats(workstreams: ProgressWorkstream[], only?: string) {
   const data = useSprint((s) => s.data)
   const zone = useIntegrations((x) => x.timezone)
   // The clock moves without new data (reads stop while cmdrd is down), so it gets its own tick.
@@ -127,7 +128,7 @@ function useSprintStats(workstreams: ProgressWorkstream[]) {
     return () => clearInterval(timer)
   }, [])
   const now = minute * 60_000
-  const s = useMemo(() => sprintStats(data?.issues ?? [], workstreams, data?.cycle, now, zone, data?.teams), [data, workstreams, now, zone])
+  const s = useMemo(() => sprintStats(data?.issues ?? [], workstreams, data?.cycle, now, zone, data?.teams, only), [data, workstreams, now, zone, only])
   return { data, s }
 }
 
@@ -166,8 +167,8 @@ function PaceBar({ s }: { s: ReturnType<typeof sprintStats> }) {
  * and to do (none is), and how that compares with the time gone. Clicking it
  * opens the Progress page.
  */
-export function MyProgress({ workstreams, onOpen }: { workstreams: ProgressWorkstream[]; onOpen: () => void }) {
-  const { data, s } = useSprintStats(workstreams)
+export function MyProgress({ workstreams, onOpen, only }: { workstreams: ProgressWorkstream[]; onOpen: () => void; only?: string }) {
+  const { data, s } = useSprintStats(workstreams, only)
   const [keyOpen, setKeyOpen] = useState(false)
   if (!data || data.state === 'off') return null
   const keyModal = keyOpen && createPortal(<SettingsModal section="connections" onClose={() => setKeyOpen(false)} />, document.body)

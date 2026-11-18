@@ -42,7 +42,7 @@ func observedExecutionOf(s Snapshot, data Data) []SnapExecution {
 		if state != store.AgentWorking {
 			active = fact.Since // idle: when its turn ended
 		}
-		out = append(out, SnapExecution{StartupAttempts: fact.StartupAttempts, StartupError: fact.StartupError, Role: fact.Role, State: state, ProjectID: fact.ProjectID, BeadID: bead, TaskBeadID: fact.BeadID, RunID: fact.RunID, SessionID: fact.SessionID, Runtime: fact.Runtime, ActiveAt: active})
+		out = append(out, SnapExecution{StartupAttempts: fact.StartupAttempts, StartupError: fact.StartupError, Role: fact.Role, State: state, ProjectID: fact.ProjectID, BeadID: bead, TaskBeadID: fact.BeadID, RunID: fact.RunID, SessionID: fact.SessionID, Runtime: fact.Runtime, Model: fact.Model, ActiveAt: active})
 	}
 	return out
 }

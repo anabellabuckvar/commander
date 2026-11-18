@@ -185,7 +185,7 @@ func TestCreateObjective_TopLevelIsLabelledAWorkstream(t *testing.T) {
 
 // With nested Managers on, a new nested workstream gets its own Manager at once and
 // the owner above it hears; with them off nothing starts (one Manager per root).
-func TestCreateNestedWorkstreamStartsItsManager(t *testing.T) {
+func TestCreateNestedWorkstreamStartsNoManager(t *testing.T) {
 	for _, on := range []bool{false, true} {
 		mem := &beads.MemClient{Prefix: "ws", EdgeParentsOnly: true}
 		ctx := context.Background()
@@ -221,17 +221,9 @@ func TestCreateNestedWorkstreamStartsItsManager(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &res); err != nil {
 			t.Fatal(err)
 		}
-		if !on {
-			if len(f.opened) != 0 || len(mailer.sent) != 0 {
-				t.Fatalf("switch off: opened %v, mailed %v", f.opened, mailer.sent)
-			}
-			continue
-		}
-		if len(f.opened) != 1 || f.opened[0] != "manifest/"+res.BeadID {
-			t.Fatalf("opened %v, want the new nested %s", f.opened, res.BeadID)
-		}
-		if len(mailer.sent) != 1 || !slices.Contains(mailer.sent[0].to, "RootManager") || !strings.Contains(mailer.sent[0].body, wsmgr.Role(res.BeadID)) {
-			t.Fatalf("parent told %+v", mailer.sent)
+		// There are no Managers: a nested workstream starts none and mails nobody, switch on or off.
+		if len(f.opened) != 0 || len(mailer.sent) != 0 || res.BeadID == "" {
+			t.Fatalf("on=%v: opened %v, mailed %v", on, f.opened, mailer.sent)
 		}
 	}
 }

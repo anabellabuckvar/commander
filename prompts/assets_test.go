@@ -99,7 +99,7 @@ func TestCommanderPromptContract(t *testing.T) {
 		"cmdr internal-workstreams",
 		"cmdr internal-open-workstream",
 		"cmdr internal-resolve-add-project",
-		"cmdr internal-create-objective",
+		"`create` edit (`\"kind\": \"workstream\"`, no parent) and its first step",
 		"from commander",
 		"agent commander",
 		"Do NOT do repo archaeology",

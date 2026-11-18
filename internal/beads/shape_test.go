@@ -237,7 +237,7 @@ func TestPlanTemplatesPassShapeCheck(t *testing.T) {
 // duplicate step, and writes nothing.
 func TestPostgresShapeGuardRefusesBatch(t *testing.T) {
 	c, dir, _ := postgresBeads(t)
-	t.Setenv("CMDR_SHAPE_CHECK", "1")
+	t.Setenv("CMDR_SHAPE_CHECK", "0") // the fixture: an empty workstream alone breaks rule 2
 	ctx := context.Background()
 	if e := c.Init(ctx, dir); e != nil {
 		t.Fatal(e)
@@ -250,6 +250,7 @@ func TestPostgresShapeGuardRefusesBatch(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	t.Setenv("CMDR_SHAPE_CHECK", "1")
 	resp := postgresApplyOps(ctx, dir, [][]string{
 		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"},
 		{"create", "Implement the spec", "--parent", trk, "--labels", "kind:objective,lane:agents", "--description", "Implement it.", "--acceptance", "It is implemented.", "--assignee", "operator-x", "--silent"},

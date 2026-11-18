@@ -211,15 +211,15 @@ func pgShapeGuard(ctx context.Context, q store.Querier, pid int64, ops [][]strin
 	}
 	bad := append(ShapeReshape(before, batch.creates, batch.referenced), ShapeNew(ShapeCheck(before), ShapeCheck(after))...)
 	bad = append(bad, ShapeTransitions(before, after, pgCallerValue(ctx, "COMMANDER_ROLE") != "")...)
-	// The tree-edit endpoint (a versioned plan) is also held to the numbered
-	// rules: only problems the batch introduces refuse it.
-	if planBasisOf(ctx) != nil {
-		bad = append(bad, planDeletes(ops)...)
-		bad = append(bad, ShapeNew(TreeRules(before), TreeRules(after))...)
-		bad = append(bad, TreeTransitions(before, after)...)
-		if ContentGrader != nil {
-			bad = append(bad, ContentGrader(ctx, changedNodes(before, after, batch.touched), after)...)
-		}
+	// Every writer is held to the numbered rules with no worsening: a write is
+	// refused when a bead newly breaks a rule, or an already broken bead breaks
+	// one more; a break the tree already had, left as it was or fixed, is not
+	// refused (the audit keeps reporting it).
+	bad = append(bad, planDeletes(ops, before)...)
+	bad = append(bad, ShapeNew(TreeRules(before), TreeRules(after))...)
+	bad = append(bad, TreeTransitions(before, after, reasonedBeads(ops))...)
+	if ContentGrader != nil {
+		bad = append(bad, ContentGrader(ctx, changedNodes(before, after, batch.touched), after)...)
 	}
 	if len(bad) > 0 {
 		bad = numbered(bad)

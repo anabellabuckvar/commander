@@ -323,7 +323,6 @@
 .tb .tb-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 14px }
 .tb .abtn { flex: none; height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 13px/1 var(--body); cursor: pointer; white-space: nowrap }
 .tb .abtn:hover { border-color: var(--muted) }
-@media (max-width: 1100px) { .tb .abtn[data-tb="classic"] { display: none } }
 /* The chat dock is outside .tb, so the board's styles never reach the chat. */
 .tb-chatdock { position: fixed; right: 0; bottom: 0; z-index: 21; width: min(420px, 100vw); height: 46vh; display: flex; flex-direction: column; min-width: 0;
   background: var(--sheet, Canvas); border-left: 1px solid var(--hairline, rgba(128, 128, 128, .3)); border-top: 1px solid var(--hairline, rgba(128, 128, 128, .3)) }
@@ -334,3 +333,9 @@
 .tb-chatdock .col-middle { flex: 1; min-height: 0; display: flex; flex-direction: column }
 .tb-chatdock .chat-slot { flex: 1; min-height: 0; display: flex; flex-direction: column }
 .tb-error { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; margin: 0; padding: 8px 14px; border-radius: 8px; background: #d5362b; color: #fff; font: 500 13px/1.3 system-ui }
+
+/* The Linear progress card (the classic sidebar's, unchanged) under the sidebar header, and in a workstream's panel */
+.tb .ab-side { flex-wrap: wrap }
+.tb .tb-linear { flex: 1 0 100%; min-width: 0 }
+.tb .tb-linear:empty, .tb .tb-linear-ws:empty { display: none }
+.tb .tb-linear .my-progress, .tb .tb-linear-ws .my-progress { width: 100%; margin: 0 }

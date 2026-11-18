@@ -79,9 +79,9 @@ func TestWorkstreamBornPlanning(t *testing.T) {
 	if _, errOut := readOutput(); code != 0 {
 		t.Fatalf("exit=%d %s", code, errOut)
 	}
-	waits := birthWaits(createCall(mock))
-	if len(waits) != 1 || waits[0].Ref != beads.ManagerPlanWait {
-		t.Fatalf("a workstream is born with the Manager to plan wait in the same create: %v %v", waits, mock.Calls)
+	// There are no Managers: a workstream waits on nothing (rules 6, 14); its first steps hold it.
+	if waits := birthWaits(createCall(mock)); len(waits) != 0 {
+		t.Fatalf("a workstream is born with a wait: %v %v", waits, mock.Calls)
 	}
 }
 

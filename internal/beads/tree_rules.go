@@ -10,9 +10,9 @@ import (
 // The board's rules, numbered as on the app's Rules tab. The shape checks in
 // shape.go carry their own names; those that are one of these rules are
 // reported with its number. TreeRules adds the numbered rules no shape check
-// covers. A versioned plan (`cmdr plan apply`, the Commander's one write path)
-// is refused with the rule's number and reason when it breaks one, and nothing
-// is written.
+// covers. Every bead write, whoever makes it, is refused with the rule's
+// number and reason when it makes the tree worse (ShapeNew), and nothing is
+// written.
 //
 //  1-5 structure, 6-13 owners, 14-16 waits and events, 17-20 titles and text,
 //  21-27 lifecycle (mostly done by the system), 28-31 content (graded by a
@@ -154,8 +154,9 @@ func TreeRules(nodes []ShapeNode) []ShapeViolation {
 }
 
 // TreeTransitions checks the numbered lifecycle rules a write breaks by what
-// it changes (26, 27), comparing the tree before and after it.
-func TreeTransitions(before, after []ShapeNode) []ShapeViolation {
+// it changes (26, 27), comparing the tree before and after it. reasoned are
+// the beads the write itself gives a reason for (a --reason, or a comment).
+func TreeTransitions(before, after []ShapeNode, reasoned map[string]bool) []ShapeViolation {
 	was := map[string]ShapeNode{}
 	for _, n := range before {
 		was[n.ID] = n
@@ -176,7 +177,8 @@ func TreeTransitions(before, after []ShapeNode) []ShapeViolation {
 					"close or supersede its open children first, in the same batch"))
 			}
 		}
-		if n.supersededBead() && (!existed || !old.supersededBead()) && !n.has("withdrawn") {
+		// A retirement by the system keeps its reason in its own record.
+		if n.supersededBead() && (!existed || !old.supersededBead()) && !n.has("withdrawn") && !n.has("retired") && !reasoned[n.ID] {
 			reason := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(n.CloseReason), "superseded")), ":"))
 			if reason == "" {
 				out = append(out, rule(27, []string{n.ID}, fmt.Sprintf("%q was superseded with no reason", n.Title),
@@ -187,13 +189,40 @@ func TreeTransitions(before, after []ShapeNode) []ShapeViolation {
 	return out
 }
 
-// planDeletes is rule 27's other half: a bead is superseded, never deleted.
-func planDeletes(ops [][]string) []ShapeViolation {
+// planDeletes is rule 27's other half: a step or workstream is superseded,
+// never deleted. An internal bead (an agent's task, a gate record) may be.
+func planDeletes(ops [][]string, before []ShapeNode) []ShapeViolation {
+	internal := map[string]bool{}
+	for _, n := range before {
+		if n.internal() {
+			internal[n.ID] = true
+		}
+	}
 	var out []ShapeViolation
 	for _, op := range ops {
-		if len(op) >= 2 && op[0] == "delete" {
+		if len(op) >= 2 && op[0] == "delete" && !internal[op[1]] {
 			out = append(out, rule(27, []string{op[1]}, fmt.Sprintf("%s would be deleted; a replaced bead is superseded, with a reason, never deleted", op[1]),
 				fmt.Sprintf("supersede %s instead (edit op supersede, with a reason)", op[1])))
+		}
+	}
+	return out
+}
+
+// reasonedBeads are the beads a write gives a reason for: a --reason on an op
+// that names it, or a comment added to it.
+func reasonedBeads(ops [][]string) map[string]bool {
+	out := map[string]bool{}
+	for _, op := range ops {
+		if len(op) >= 4 && op[0] == "comments" && op[1] == "add" && strings.TrimSpace(op[3]) != "" {
+			out[op[2]] = true
+			continue
+		}
+		if len(op) < 2 {
+			continue
+		}
+		pos, f, e := parsePGFlags(op[1:], "--title --description --acceptance --notes --status --priority --type --labels --add-label --remove-label --parent --assignee --reason --force --silent --no-inherit-labels --claim --ref --mode --dry-run --source-project --target-project")
+		if e == nil && len(pos) > 0 && strings.TrimSpace(f.one("--reason")) != "" {
+			out[pos[0]] = true
 		}
 	}
 	return out

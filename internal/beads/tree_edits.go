@@ -17,7 +17,8 @@ type TreeEdit struct {
 	ID string `json:"id,omitempty"`
 	// Ref names a created bead for later edits ("$<ref>").
 	Ref string `json:"ref,omitempty"`
-	// Parent: create and move: the workstream it goes under.
+	// Parent: create and move: the workstream it goes under. A workstream
+	// created with no parent is a new top-level workstream.
 	Parent string `json:"parent,omitempty"`
 	// Kind: create: workstream or step (default step).
 	Kind  string `json:"kind,omitempty"`
@@ -75,10 +76,16 @@ func CompileTreeEdits(edits []TreeEdit) ([][]string, error) {
 		}
 		switch e.Op {
 		case "create":
-			if err := need(map[string]string{"parent": e.Parent, "title": e.Title}); err != nil {
+			if err := need(map[string]string{"title": e.Title}); err != nil {
 				return nil, err
 			}
-			op := []string{"create", e.Title, "--parent", e.Parent}
+			if strings.TrimSpace(e.Parent) == "" && e.Kind != "workstream" {
+				return nil, bad("parent is required: only a workstream is created at the top")
+			}
+			op := []string{"create", e.Title}
+			if e.Parent != "" {
+				op = append(op, "--parent", e.Parent)
+			}
 			switch e.Kind {
 			case "workstream":
 				if e.Owner != "" {
