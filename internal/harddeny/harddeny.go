@@ -422,7 +422,14 @@ func remoteVM(args []string) bool {
 
 var vmVerbs = regexp.MustCompile(`(?i)^\s*(\S+\s+)?(rm|stop|restart|delete|destroy|reboot|shutdown)\b`)
 
+// devVMRestart: restarting (only restarting) a dev VM is allowed (Eric, Nov 18):
+// a hung dev box blocks agents and restart loses no prod state.
+var devVMRestart = regexp.MustCompile(`(?i)^\s*restart\s+[a-z0-9-]+-dev[0-9]*\s*$`)
+
 func vmVerb(rest string) Verdict {
+	if devVMRestart.MatchString(rest) {
+		return Verdict{}
+	}
 	if vmVerbs.MatchString(rest) {
 		return Verdict{Rule: "vm-stop", Why: "stops, restarts or removes a VM through exe.dev"}
 	}

@@ -77,3 +77,22 @@ echo started`, cmdr, ""},
 		}
 	}
 }
+
+func TestDevVMRestartAllowed(t *testing.T) {
+	for _, c := range []struct {
+		cmd    string
+		denied bool
+	}{
+		{"ssh exe.dev restart prod-forge-orders-management-hub-dev2", false},
+		{"ssh exe.dev restart prod-forge-qa-hub-dev", false},
+		{"ssh exe.dev restart prod-forge-orders-management-hub", true},
+		{"ssh exe.dev stop prod-forge-orders-management-hub-dev2", true},
+		{"ssh exe.dev rm prod-forge-orders-management-hub-dev2", true},
+		{"ssh exe.dev restart prod-forge-x-dev2; ssh exe.dev rm prod-forge-x", true},
+	} {
+		v := Check(c.cmd, Context{})
+		if v.Denied() != c.denied {
+			t.Errorf("%q: denied=%v, want %v (%s)", c.cmd, v.Denied(), c.denied, v.Rule)
+		}
+	}
+}
