@@ -96,3 +96,65 @@ func TestPostgresNativeEvidenceRequiresCurrentRunAndSession(t *testing.T) {
 	}
 
 }
+
+// Run 5106 (Nov 17): a native run that failed to launch 5 times sat at
+// "running" for a day with no process, so its step could not close and no new
+// agent started. The reaper ends such a run, and a run with no live process.
+func TestPostgresDeadNativeRunsAreReaped(t *testing.T) {
+	s := postgresTestStore(t)
+	ctx := context.Background()
+	pid, e := s.InsertProject(ctx, Project{Name: "dead-runs", Path: t.TempDir(), Type: "code", Status: "active"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	now := time.Now()
+	run := func(bead string, spawned time.Time, attempts int) int64 {
+		t.Helper()
+		if _, e := s.DB().Exec(`INSERT INTO bead_tasks(project_id,id,title,description,acceptance_criteria,created_at,updated_at) VALUES(?,?,'Step','Do it.','Done.','now','now')`, pid, bead); e != nil {
+			t.Fatal(e)
+		}
+		id, e := s.InsertAgentRun(ctx, AgentRun{ProjectID: pid, TaskBeadID: bead, AgentName: "executor." + bead, OpencodeSessionID: "session-" + bead, SpawnTime: spawned.Unix()})
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.DB().Exec(`UPDATE agent_runs SET execution_driver='native' WHERE id=?`, id); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = s.DB().Exec(`UPDATE bead_tasks SET active_run_id=?,status='in_progress',execution_attempts=?,execution_error=? WHERE project_id=? AND id=?`, id, attempts, map[bool]string{true: "host start failed", false: ""}[attempts > 0], pid, bead); e != nil {
+			t.Fatal(e)
+		}
+		return id
+	}
+	never := run("never-launched", now.Add(-24*time.Hour), 5) // run 5106
+	gone := run("process-gone", now.Add(-time.Hour), 0)
+	alive := run("alive", now.Add(-time.Hour), 0)
+	young := run("starting", now.Add(-time.Minute), 0)
+	if e := s.RecordRuntimeEvidence(ctx, nil, now, []NativeRuntimeObservation{{Role: "executor.alive", RunID: alive, SessionID: "session-alive", PID: 42}}); e != nil {
+		t.Fatal(e)
+	}
+	status := func(id int64) string {
+		var st string
+		if e := s.DB().QueryRow(`SELECT status FROM agent_runs WHERE id=?`, id).Scan(&st); e != nil {
+			t.Fatal(e)
+		}
+		return st
+	}
+	// Just after a daemon start, only the run that never launched ends: hosts may not be re-adopted yet.
+	dead, e := s.ReapDeadNativeRuns(ctx, now, 10*time.Minute, false)
+	if e != nil || len(dead) != 1 || dead[0].RunID != never || status(never) == "running" || status(gone) != "running" {
+		t.Fatalf("unwatched reap: %+v %v (gone %s)", dead, e, status(gone))
+	}
+	// Watched: the run with no live process ends too; a live run and one still starting do not.
+	dead, e = s.ReapDeadNativeRuns(ctx, now, 10*time.Minute, true)
+	if e != nil || len(dead) != 1 || dead[0].RunID != gone {
+		t.Fatalf("watched reap: %+v %v", dead, e)
+	}
+	if status(gone) == "running" || status(alive) != "running" || status(young) != "running" {
+		t.Fatalf("statuses: gone %s alive %s young %s", status(gone), status(alive), status(young))
+	}
+	// The step is free: no live run holds it any more.
+	var held bool
+	if e := s.DB().QueryRow(`SELECT EXISTS(SELECT 1 FROM bead_tasks b JOIN agent_runs r ON r.id=b.active_run_id WHERE b.project_id=? AND b.id='never-launched' AND r.status='running')`, pid).Scan(&held); e != nil || held {
+		t.Fatalf("step still held by a running run: %v %v", held, e)
+	}
+}

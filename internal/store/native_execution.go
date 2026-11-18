@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 )
 
 // NativeExecution is the existing canonical run and bead, not a second claim.
@@ -83,4 +85,70 @@ func (s *Store) UsageRecoverySource(ctx context.Context, rid int64) (bool, error
 	e := s.db.QueryRowContext(ctx, `SELECT ((status='native-error' AND EXISTS(SELECT 1 FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.id='native-exit:'||r.id::text AND c.fact_kind='native-usage-limit'))
   OR (status<>'running' AND COALESCE((SELECT c.fact_value->>'to' FROM bead_comments c WHERE c.project_id=r.project_id AND c.bead_id=r.task_bead_id AND c.run_id=r.id AND c.fact_kind='`+CutoverFactKind+`' ORDER BY c.created_at DESC,c.id DESC LIMIT 1),'')<>'')) AND NOT EXISTS(SELECT 1 FROM bead_questions q JOIN bead_tasks b ON b.project_id=q.project_id AND b.id=q.bead_id WHERE q.run_id=r.id AND q.blocking AND q.state='pending' AND q.plan_revision=b.plan_revision) FROM agent_runs r WHERE r.id=?`, rid).Scan(&yes)
 	return yes, e
+}
+
+// DeadNativeRun is a native run marked running whose agent is gone.
+type DeadNativeRun struct {
+	RunID int64
+	Role  string
+	Why   string
+}
+
+// ReapDeadNativeRuns ends native runs marked running that have no agent behind
+// them, so their step is free again (it restarts on a fresh agent, or can be
+// closed or superseded): a run that never launched (its five startup attempts
+// are spent, after which nothing retries it), and, when watched (the daemon has
+// been up for grace, long enough to have re-adopted every live host), a run
+// started over grace ago with no live process seen within grace. A live run is
+// always seen: the presence check renews its evidence every 30 seconds.
+func (s *Store) ReapDeadNativeRuns(ctx context.Context, now time.Time, grace time.Duration, watched bool) ([]DeadNativeRun, error) {
+	if !s.postgres {
+		return nil, nil
+	}
+	cut := now.Add(-grace).Unix()
+	rows, e := s.db.QueryContext(ctx, `SELECT r.id,r.agent_name,r.opencode_session_id,COALESCE(b.execution_attempts,0)>=5,COALESCE(b.execution_error,'') FROM agent_runs r
+ LEFT JOIN bead_tasks b ON b.active_run_id=r.id AND b.project_id=r.project_id AND b.id=r.task_bead_id
+ WHERE r.status='running' AND r.execution_driver='native' AND (COALESCE(b.execution_attempts,0)>=5
+  OR (? AND r.spawn_time<=? AND NOT EXISTS(SELECT 1 FROM run_observations o WHERE o.run_id=r.id AND o.alive AND o.checked_at>=?)))
+ ORDER BY r.id LIMIT 64`, watched, cut, cut)
+	if e != nil {
+		return nil, e
+	}
+	type dead struct {
+		id                    int64
+		role, session, detail string
+		neverLaunched         bool
+	}
+	var found []dead
+	for rows.Next() {
+		var d dead
+		if e = rows.Scan(&d.id, &d.role, &d.session, &d.neverLaunched, &d.detail); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		found = append(found, d)
+	}
+	rows.Close()
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+	var out []DeadNativeRun
+	var first error
+	for _, d := range found {
+		why := fmt.Sprintf("no live process for over %s", grace)
+		if d.neverLaunched {
+			why = "it never launched (5 failed starts)"
+			if d.detail != "" {
+				why += ": " + truncateSupervision(d.detail, 120)
+			}
+		}
+		if e := s.FinishNativeExecutionExit(ctx, d.role, d.id, d.session, "native-error", "", why); e != nil {
+			if first == nil {
+				first = fmt.Errorf("reap native run %d: %w", d.id, e)
+			}
+			continue
+		}
+		out = append(out, DeadNativeRun{RunID: d.id, Role: d.role, Why: why})
+	}
+	return out, first
 }

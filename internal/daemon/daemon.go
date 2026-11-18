@@ -1107,6 +1107,9 @@ func firstLine(s string, n int) string {
 	return s
 }
 
+// deadRunGrace is how long a native run may go without a live process before it is ended.
+const deadRunGrace = 10 * time.Minute
+
 // reapHostRuns closes agent_runs rows of Operators whose process ended, at
 // startup and every minute, so they stop counting against their workstream's
 // Operator cap, and moves each one's bead on (review, or open again). It also
@@ -1117,6 +1120,7 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 	// Runs found dead in the first sweep were killed while cmdrd was down
 	// (restart, reboot); later ones died while it watched.
 	first := true
+	started := time.Now()
 	sleep := sleepWatch{now: time.Now}
 	var retries settleRetries
 	battery := newBatteryWatcher(d.settle.mail)
@@ -1127,6 +1131,17 @@ func (d *Daemon) reapHostRuns(ctx context.Context) {
 		d.settle.reported.beginSweep()
 		// Before the sweep, so a run past its final report is closed and settled this minute.
 		d.settle.endFinishedRuns(ctx, nil)
+		// Native runs with no agent behind them (never launched, or no live
+		// process for 10 minutes once this daemon has watched that long) end
+		// here; their step restarts on a fresh agent or can be closed.
+		if dead, err := d.store.ReapDeadNativeRuns(ctx, time.Now(), deadRunGrace, time.Since(started) >= deadRunGrace); len(dead) > 0 || err != nil {
+			for _, r := range dead {
+				log.Printf("daemon: ended dead native run %d (%s): %s", r.RunID, r.Role, r.Why)
+			}
+			if err != nil {
+				log.Printf("daemon: reaping dead native runs: %v", err)
+			}
+		}
 		res, err := spawn.ReapHostRuns(ctx, d.store)
 		if len(res.ClosedRuns) > 0 || err != nil {
 			log.Printf("daemon: closed operator runs %v: %d exited, %d died (err=%v)", res.ClosedRuns, len(res.Exited), len(res.Died), err)
