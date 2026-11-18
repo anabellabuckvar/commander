@@ -303,3 +303,40 @@ func TestTreeNumbersOpenWorkstreamsFirst(t *testing.T) {
 		t.Fatalf("the Commander's read numbers differently:\n%s", text)
 	}
 }
+
+// 3.1 "Earlier fixes and groundwork" (Nov 18) read 100% but not done; 1.3.1 held
+// a done workstream and open steps and read 100%. A row is done exactly when all
+// its child workstreams and its own steps are, and its progress counts the same.
+func TestTreeDoneAndProgressAgree(t *testing.T) {
+	closedTrack := func(id string) SnapStep {
+		return SnapStep{BeadID: id, Title: "Done track " + id, Track: true, Status: "closed"}
+	}
+	snap := Snapshot{Workstreams: []SnapWorkstream{
+		{N: 1, Project: "app", BeadID: "a", Title: "Parent of done workstreams", Status: "open", Steps: []SnapStep{
+			{BeadID: "a.1", Title: "Earlier fixes and groundwork", Track: true, Status: "open", Children: []SnapStep{closedTrack("a.1.1"), closedTrack("a.1.2"), closedTrack("a.1.3"), closedTrack("a.1.4"), closedTrack("a.1.5")}},
+		}},
+		{N: 2, Project: "app", BeadID: "m", Title: "Mixed", Status: "open", Steps: []SnapStep{
+			{BeadID: "m.1", Title: "Teams delivery", Track: true, Status: "open", Children: []SnapStep{
+				{BeadID: "m.1.1", Title: "Sealed review runtime", Track: true, Status: "open", Children: []SnapStep{{BeadID: "m.1.1.1", Title: "Done step", Status: "closed"}}},
+				{BeadID: "m.1.2", Title: "Load the Teams key", Status: "open", Lane: "you"},
+			}},
+		}},
+	}}
+	tr := BuildTree(snap, 0)
+	rows := map[string]TreeRow{}
+	for _, r := range tr.Rows {
+		rows[r.ID] = r
+		if (r.Progress == 100) != r.Done {
+			t.Errorf("%s %s: %d%% (%s) but done=%v", r.Label, r.ID, r.Progress, r.Of, r.Done)
+		}
+	}
+	if r := rows["a.1"]; !r.Done || r.Of != "5 of 5 workstreams" {
+		t.Errorf("parent of done workstreams: %+v", r)
+	}
+	if r := rows["a"]; !r.Done {
+		t.Errorf("top-level parent of a done workstream: %+v", r)
+	}
+	if r := rows["m.1"]; r.Done || r.Progress != 50 || r.Of != "1 of 1 workstream and 0 of 1 step" {
+		t.Errorf("mixed row: done=%v %d%% %q", r.Done, r.Progress, r.Of)
+	}
+}

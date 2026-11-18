@@ -513,23 +513,7 @@ func (b *treeBuild) finish(order []string, now int64) {
 		row.Note = map[bool]string{true: "Paused"}[b.paused[id]]
 		row.Summary = b.summary[id]
 		kids := b.kids[id]
-		if len(kids) > 0 {
-			n := 0
-			for _, k := range kids {
-				if b.done(k) {
-					n++
-				}
-			}
-			row.Progress, row.Of = treePct(n, len(kids)), fmt.Sprintf("%d of %d %s", n, len(kids), plural(len(kids), "workstream", "workstreams"))
-		} else {
-			n := 0
-			for _, s := range all {
-				if !open(s) {
-					n++
-				}
-			}
-			row.Progress, row.Of = treePct(n, len(all)), fmt.Sprintf("%d of %d %s", n, len(all), plural(len(all), "step", "steps"))
-		}
+		row.Progress, row.Of = b.progress(id)
 		for _, s := range all {
 			if st := b.steps[s]; st.State == "active" && st.Type == "you" && yourCard(st) {
 				row.NeedsYou++
@@ -649,28 +633,55 @@ func (b *treeBuild) stepsUnder(id string) []string {
 	return out
 }
 
-// done: every step under it is done; a workstream with no steps is done when its bead is closed.
+// done: a workstream is done exactly when all its items are: its child
+// workstreams (each by this same rule) and its own steps (rule 25). One with
+// no items is done when its own bead is closed. Progress counts the same items,
+// so it reads 100% exactly when the row is done.
 func (b *treeBuild) done(id string) bool {
-	all := b.stepsUnder(id)
-	if len(all) == 0 {
-		// No steps anywhere under it: a parent is done when all its child workstreams are (rule 25),
-		// a leaf when its own bead is closed.
-		if kids := b.kids[id]; len(kids) > 0 {
-			for _, k := range kids {
-				if !b.done(k) {
-					return false
-				}
-			}
-			return true
-		}
+	kids, own := b.kids[id], b.own[id]
+	if len(kids)+len(own) == 0 {
 		return b.closed[id]
 	}
-	for _, s := range all {
+	for _, k := range kids {
+		if !b.done(k) {
+			return false
+		}
+	}
+	for _, s := range own {
 		if b.steps[s].State != "done" {
 			return false
 		}
 	}
 	return true
+}
+
+// progress is how many of a row's items (child workstreams and own steps) are done, and in words.
+func (b *treeBuild) progress(id string) (int, string) {
+	kids, own := b.kids[id], b.own[id]
+	doneKids, doneSteps := 0, 0
+	for _, k := range kids {
+		if b.done(k) {
+			doneKids++
+		}
+	}
+	for _, s := range own {
+		if b.steps[s].State == "done" {
+			doneSteps++
+		}
+	}
+	n, of := doneKids+doneSteps, len(kids)+len(own)
+	switch {
+	case of == 0:
+		if b.done(id) {
+			return 100, "done"
+		}
+		return 0, "nothing planned"
+	case len(own) == 0:
+		return treePct(n, of), fmt.Sprintf("%d of %d %s", n, of, plural(of, "workstream", "workstreams"))
+	case len(kids) == 0:
+		return treePct(n, of), fmt.Sprintf("%d of %d %s", n, of, plural(of, "step", "steps"))
+	}
+	return treePct(n, of), fmt.Sprintf("%d of %d %s and %d of %d %s", doneKids, len(kids), plural(len(kids), "workstream", "workstreams"), doneSteps, len(own), plural(len(own), "step", "steps"))
 }
 
 // ends are a set's first steps (nothing in the set before them) or last steps (nothing in it after them).
