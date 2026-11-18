@@ -7712,3 +7712,8 @@ button.xf-step.xf-open:hover {
 .app-top-left .board-switch:hover {
   color: inherit;
 }
+
+/* The tree board fills the window: it has no rail or top bar of the app grid. */
+.app.app-tree {
+  display: block;
+}
