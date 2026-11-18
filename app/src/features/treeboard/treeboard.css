@@ -382,3 +382,6 @@
 /* The board keeps its layers to itself, so app popups (the rail menus, alerts) always show above it. */
 .tb-main-host { isolation: isolate; z-index: 0 }
 .col-main .col-inspector { isolation: isolate }
+
+/* App-wide .appbar and .canvas rules clip; the board header must let its menus (Filter) hang below it. */
+.tb .appbar { overflow: visible !important }
