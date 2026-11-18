@@ -11,7 +11,8 @@ import { isPage } from '../viewmodel'
 export function TopBar({ left, chat }: { left: number; chat: number }) {
   const page = useStore((s) => (isPage(s.selected) ? s.selected.kind : null))
   const focus = useStore((s) => s.focus)
-  const focused = useStore((s) => s.selected.kind !== 'commander' && !isPage(s.selected))
+  // The middle pane is the tree board, always shown beside the chat (as in App), so the bar is always split.
+  const focused = true
   const narrow = useStore((s) => s.narrow)
   const chatTab = useStore((s) => s.chatTab)
   const target = useChatTarget()
