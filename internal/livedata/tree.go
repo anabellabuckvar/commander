@@ -502,10 +502,14 @@ func (b *treeBuild) finish(order []string, now int64) {
 		}
 	}
 	// An unblocked agent step never sits unstarted (rule 21): the watcher starts an agent on it.
+	// An unblocked step owned by a named person or team is theirs now: it is current, not upcoming.
 	for _, id := range sortedKeys(b.steps) {
 		s := b.steps[id]
-		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review" || s.Type == "automatic") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
+		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review" || s.Type == "automatic" || s.Type == "person") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
 			s.State = "active"
+			if s.Type == "person" && (s.Text == "" || s.Text == "Not started" || s.Text == "Not reached") {
+				s.Text = "Waiting on " + s.Own
+			}
 		}
 	}
 	// Numbers are places among the workstreams shown: open ones first, in rank
