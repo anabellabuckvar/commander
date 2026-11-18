@@ -80,7 +80,7 @@ func (d *Daemon) runAutoAccept(ctx context.Context) {
 		}
 		raiseQuestionCards(ctx, d.store.QuestionsWithoutCards, cmdrCommand)
 		applyAnswers(ctx, d.store.PendingAnswers, d.attempted, d.answerQuestion)
-		closed := closeAnsweredGates(ctx, d.store.AnsweredGates, d.tryClose)
+		closed := closeAnsweredGates(ctx, d.store.AnsweredGates, d.tryClose, d.finishRejectedGate)
 		if acceptResults(ctx, d.store.AgentResultsToAccept, d.tryClose)+closed > 0 {
 			d.store.NotifyStateChanged(ctx)
 			d.autoDispatchOnce(ctx)

@@ -285,3 +285,15 @@ func deployLabel() string {
 	w.Since = time.Unix(1_800_000_000, 0)
 	return w.Label()
 }
+
+// vibe-apps-en1h.15.37 (Nov 18): applying Eric's "no" to a merge card adds the
+// Commander's custody (owner:commander) beside the gate's approver; that is not
+// a second owner.
+func TestCustodyIsNotASecondOwner(t *testing.T) {
+	gate := step("W.1.1", "W.1", "Merge the fleet-notice Slack fallback PR", "gate", "approver:user", "owner:commander", "decision:answered")
+	for _, v := range TreeRules([]ShapeNode{ws("W"), track("W.1", "W", "Phase"), gate}) {
+		if v.Number == 7 {
+			t.Fatalf("custody read as an owner: %+v", v)
+		}
+	}
+}

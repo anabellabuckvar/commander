@@ -92,11 +92,13 @@ func (n *ShapeNode) supersededBead() bool {
 		(n.closed() && strings.Contains(strings.ToLower(n.CloseReason), "superseded"))
 }
 
-// laneOwners are the owner tags a step carries (rule 7: exactly one).
+// laneOwners are the owner tags a step carries (rule 7: exactly one): its lane
+// and a user gate's approver. owner:<role> is custody (who holds it right now,
+// e.g. the Commander applying an answer), not the step's owner.
 func (n *ShapeNode) laneOwners() []string {
 	var out []string
 	for _, l := range n.Labels {
-		if strings.HasPrefix(l, "lane:") || strings.HasPrefix(l, "owner:") {
+		if strings.HasPrefix(l, "lane:") {
 			out = append(out, l)
 		}
 	}
