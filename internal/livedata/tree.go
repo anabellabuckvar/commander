@@ -336,7 +336,12 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	if drawn && d.Title != "" {
 		title, _ = treeTitle(d.Title)
 	}
-	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: d.Since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
+	// Time on the step: the diagram's own since, else when the step last moved (every active card shows a timer).
+	since := d.Since
+	if since == 0 {
+		since = s.ProgressAt
+	}
+	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
 	switch {
 	case actor == "you":
 		st.Type, st.Owner = "you", "You"
