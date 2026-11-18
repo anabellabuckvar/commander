@@ -3,7 +3,7 @@
 // snapshot version moves. Below the right panel sits the Commander's chat: what
 // Eric has open rides along with each message (selection.ts).
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
 import { board as boardVM } from '../../renderer/src/viewmodel'
@@ -17,6 +17,19 @@ import { setBoardMode } from './mode'
 import { setTreeSelection } from './selection'
 import type { Selection, Tree, TreeRow } from './types'
 import './treeboard.css'
+
+const NARROW = 900
+const CHAT_W_KEY = 'commander.tree.chatWidth'
+const clampChat = (w: number) => Math.min(640, Math.max(340, Math.round(w)))
+function loadChatWidth(): number {
+  try {
+    const v = Number(localStorage.getItem(CHAT_W_KEY))
+    if (v) return clampChat(v)
+  } catch {
+    // no storage: the default
+  }
+  return 400
+}
 
 export async function fetchTree(apiUrl: string, token: string): Promise<Tree> {
   const res = await fetch(`${apiUrl}/api/tree`, { headers: { Authorization: `Bearer ${token}` } })
@@ -88,30 +101,73 @@ export function TreeBoard() {
     }
   }, [cfg, version])
 
-  const dock = chat || !!sel
-  useEffect(() => board.current?.setChatOpen(dock), [dock])
+  // Two panes: the board on the left, the Commander chat on the right (resizable).
+  // In a narrow window or side tab the chat is a toggle that opens over the board.
+  const [winW, setWinW] = useState(() => window.innerWidth)
+  useEffect(() => {
+    const onResize = () => setWinW(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const narrow = winW < NARROW
+  const [chatW, setChatW] = useState(loadChatWidth)
+  const startDrag = (e: ReactPointerEvent) => {
+    e.preventDefault()
+    const x0 = e.clientX,
+      w0 = chatW
+    const move = (m: PointerEvent) => setChatW(clampChat(w0 - (m.clientX - x0)))
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setChatW((w) => {
+        try {
+          localStorage.setItem(CHAT_W_KEY, String(w))
+        } catch {
+          // the width just won't stick
+        }
+        return w
+      })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const chatShown = !narrow || chat
 
   return (
-    <div className="tb-root">
-      <div className="tb" ref={ref} />
-      {linearSlot && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} />, linearSlot)}
-      {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} />, wsSlot.el)}
+    <div className={`tb-root${narrow ? ' narrow' : ''}`} style={{ ['--chat-w' as string]: `${chatW}px` }}>
+      <div className="tb-pane">
+        <div className="tb" ref={ref} />
+      </div>
+      {linearSlot && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, linearSlot)}
+      {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} cycles={false} />, wsSlot.el)}
       {error && (
         <p className="tb-error" role="alert">
           Board unavailable: {error}
         </p>
       )}
-      <aside className={`tb-chatdock${sel ? '' : ' full'}`} hidden={!dock} aria-label="Message the Commander">
+      {!narrow && <div className="tb-split" role="separator" aria-orientation="vertical" aria-label="Resize the chat" onPointerDown={startDrag} />}
+      <aside className="tb-chatcol" hidden={!chatShown} aria-label="Message the Commander">
         <div className="tb-chathead">
-          <span>{sel ? `Commander · about ${sel.kind === 'step' ? `this step in ${sel.label}` : `workstream ${sel.label}`}` : 'Commander'}</span>
-          {!sel && (
-            <button type="button" onClick={() => setChat(false)}>
+          {sel ? (
+            <span className="tb-selchip" title="Each message carries what you have open">
+              <span className="tb-selchip-t">
+                {sel.label} {sel.title}
+              </span>
+              <button type="button" aria-label="Clear the selection" onClick={() => board.current?.clear()}>
+                ×
+              </button>
+            </span>
+          ) : (
+            <span className="tb-chatname">Commander</span>
+          )}
+          {narrow && (
+            <button type="button" className="tb-chatclose" onClick={() => setChat(false)}>
               Close
             </button>
           )}
         </div>
-        <section className="col col-middle" style={{ ['--chat-col' as string]: '380px' }}>
-          <div className="chat-slot">{dock && <ChatSlot />}</div>
+        <section className="col col-middle" style={{ ['--chat-col' as string]: `${Math.max(280, chatW - 40)}px` }}>
+          <div className="chat-slot">{chatShown && <ChatSlot />}</div>
         </section>
       </aside>
     </div>

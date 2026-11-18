@@ -167,7 +167,7 @@ function PaceBar({ s }: { s: ReturnType<typeof sprintStats> }) {
  * and to do (none is), and how that compares with the time gone. Clicking it
  * opens the Progress page.
  */
-export function MyProgress({ workstreams, onOpen, only }: { workstreams: ProgressWorkstream[]; onOpen: () => void; only?: string }) {
+export function MyProgress({ workstreams, onOpen, only, cycles = true }: { workstreams: ProgressWorkstream[]; onOpen: () => void; only?: string; cycles?: boolean }) {
   const { data, s } = useSprintStats(workstreams, only)
   const [keyOpen, setKeyOpen] = useState(false)
   if (!data || data.state === 'off') return null
@@ -194,7 +194,7 @@ export function MyProgress({ workstreams, onOpen, only }: { workstreams: Progres
       <section className="my-progress" aria-label="Progress">
         <ProgressHead />
         <p className="my-progress-note">{unreachable ? unreachableNote(data, Date.now()) : 'No active cycle'}</p>
-        <TeamCycles data={data} />
+        {cycles && <TeamCycles data={data} />}
       </section>
     )
   }
@@ -208,7 +208,7 @@ export function MyProgress({ workstreams, onOpen, only }: { workstreams: Progres
           <Stat type="started" n={s.started.length} label="in progress" />
           <Stat type="completed" n={s.done.length} label="done" />
         </span>
-        {data.teams && <TeamCycles data={data} />}
+        {cycles && data.teams && <TeamCycles data={data} />}
         {unreachable && <span className="my-progress-note">{unreachableNote(data, Date.now())}</span>}
       </button>
       {keyModal}
