@@ -373,10 +373,11 @@
 .tb .tb-linear .sp-stats { grid-column: 1 / -1; grid-row: 2; margin: 0; font-size: 11.5px }
 .tb .canvas > .hd, .tb .canvas > .tree.hd { height: var(--hdh); padding-block: 0; display: flex; align-items: center }
 
-/* The tree column stays put while the board scrolls sideways (see onHScroll in board.ts). */
-.tb .canvas > .tree { transform: translateX(var(--sx, 0px)); z-index: 6 }
-.tb .canvas > .tree:not(.hd) { position: relative }
-.tb .canvas > .tree.hd { z-index: 8 }
+/* The tree column is a real sidebar: sticky to the left edge of the board's scroller. The canvas must not
+   clip (overflow hidden there made the canvas the sticky container, so the tree slid with the board). */
+.tb .canvas { overflow: visible !important }
+.tb .canvas > .tree { position: sticky; left: 0; z-index: 6 }
+.tb .canvas > .tree.hd { top: 0; z-index: 8 }
 
 /* The board keeps its layers to itself, so app popups (the rail menus, alerts) always show above it. */
 .tb-main-host { isolation: isolate; z-index: 0 }
