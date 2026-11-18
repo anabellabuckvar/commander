@@ -377,3 +377,7 @@
 .tb .canvas > .tree { transform: translateX(var(--sx, 0px)); z-index: 6 }
 .tb .canvas > .tree:not(.hd) { position: relative }
 .tb .canvas > .tree.hd { z-index: 8 }
+
+/* The board keeps its layers to itself, so app popups (the rail menus, alerts) always show above it. */
+.tb-main-host { isolation: isolate; z-index: 0 }
+.col-main .col-inspector { isolation: isolate }
