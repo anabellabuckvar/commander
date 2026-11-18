@@ -264,7 +264,9 @@ func (b *treeBuild) level(ws SnapWorkstream, steps []SnapStep, row *TreeRow, ord
 			title, tix := treeTitle(trackTitle(s.Title))
 			child := &TreeRow{ID: s.BeadID, Key: ws.Project + ":" + s.BeadID, Project: ws.Project, Parent: row.ID, Label: row.Label + "." + strconv.Itoa(k),
 				Depth: row.Depth + 1, Title: title, Tickets: mergeTickets(s.Tickets, tix), Criteria: criteriaList(s.Criteria)}
-			if d, ok := b.diagram[s.BeadID]; ok && (strings.HasPrefix(d.Text, "Paused") || s.Hold) {
+			// A parked (deferred) workstream, or one inside a paused parent, is paused: the watcher holds its
+			// steps, so the board says "Paused" rather than "Stalled".
+			if d, ok := b.diagram[s.BeadID]; (ok && strings.HasPrefix(d.Text, "Paused")) || s.Hold || s.Status == "deferred" || b.paused[row.ID] {
 				b.paused[child.ID] = true
 			}
 			b.closed[child.ID] = s.Status == "closed"
