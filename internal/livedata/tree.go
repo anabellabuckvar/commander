@@ -648,6 +648,16 @@ func (b *treeBuild) stepsUnder(id string) []string {
 func (b *treeBuild) done(id string) bool {
 	all := b.stepsUnder(id)
 	if len(all) == 0 {
+		// No steps anywhere under it: a parent is done when all its child workstreams are (rule 25),
+		// a leaf when its own bead is closed.
+		if kids := b.kids[id]; len(kids) > 0 {
+			for _, k := range kids {
+				if !b.done(k) {
+					return false
+				}
+			}
+			return true
+		}
 		return b.closed[id]
 	}
 	for _, s := range all {
