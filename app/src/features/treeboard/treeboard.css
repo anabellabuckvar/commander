@@ -182,7 +182,7 @@
 .tb .ln.v { border-left-width: 1.5px; width: 0 } .tb .ln.h { border-top-width: 1.5px; height: 0 }
 .tb .tbody { flex: 1; min-width: 0; padding: 16px 16px 16px 8px; display: flex; flex-direction: column; gap: 9px }
 /* the connector's elbow and the workstream number share one anchor: the row's centre on desktop, a fixed offset from the row's top on a phone */
-.tb .th { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.tb .th { display: flex; align-items: baseline; gap: 8px; min-width: 0 }
 .tb .tk { flex: none; display: flex; align-items: baseline; gap: 8px; position: relative }
 .tb .tbody { align-self: center }
 @media (max-width: 640px) { .tb .tree .tbody { align-self: flex-start } .tb .th { align-items: flex-start } }

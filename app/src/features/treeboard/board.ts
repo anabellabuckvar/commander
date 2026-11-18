@@ -395,11 +395,16 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
   }
 
   // The two panes' rows and headers are the same height: each row is as tall as the taller side.
-  function alignPanes() {
+  // The two headers are one height, so the WORKSTREAMS and NOW header rows line up. Re-run when either
+  // header's content changes size (the Linear bar renders after the board).
+  function alignHeaders() {
     const hs = [side, main].map((r) => r.querySelector<HTMLElement>('.appbar'))
     hs.forEach((h) => h && (h.style.minHeight = ''))
     const hh = Math.max(...hs.map((h) => h?.offsetHeight ?? 0))
     hs.forEach((h) => h && (h.style.minHeight = hh + 'px'))
+  }
+  function alignPanes() {
+    alignHeaders()
     const tracks = [treeEl, canvasEl].map((c) => {
       c.style.gridTemplateRows = ''
       return getComputedStyle(c).gridTemplateRows.split(' ').map(parseFloat)
@@ -827,6 +832,9 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
   const sized = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => onResize()) : null
   sized?.observe(side)
   sized?.observe(main)
+  // Header content (not the headers, whose min-height is set above) drives the header alignment.
+  const headSized = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(alignHeaders)) : null
+  ;[side, main].forEach((r) => r.querySelectorAll<HTMLElement>('.ab-side > *, .ab-main > *').forEach((el) => headSized?.observe(el)))
   both.forEach((r) => r.addEventListener('click', onClick))
   both.forEach((r) => r.addEventListener('mouseover', onOver))
   document.addEventListener('keydown', onKey)
@@ -866,6 +874,7 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
       sideGraph.removeEventListener('scroll', fromSide)
       mainGraph.removeEventListener('scroll', fromMain)
       sized?.disconnect()
+      headSized?.disconnect()
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', onResize)
       side.innerHTML = ''
