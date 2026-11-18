@@ -817,6 +817,17 @@ func (b *treeBuild) status(id string) []TreeLine {
 	case b.paused[id]:
 		return []TreeLine{{"none", "Paused"}}
 	}
+	// A parent whose open work all sits in paused workstreams is paused too, not stalled.
+	allPaused := true
+	for _, s := range openSteps {
+		if !b.paused[b.steps[s].Row] {
+			allPaused = false
+			break
+		}
+	}
+	if allPaused {
+		return []TreeLine{{"none", "Paused"}}
+	}
 	return []TreeLine{{"bad", "Stalled: nothing active"}}
 }
 
