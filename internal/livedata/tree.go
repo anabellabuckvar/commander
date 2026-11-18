@@ -351,11 +351,13 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 		since = s.ProgressAt
 	}
 	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
+	// A step whose agent asked Eric something is his card until he answers.
+	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.QuestionWaiting)
 	switch {
 	case s.Automatic:
 		// Automatic: no person or agent; it waits for one event and closes itself.
 		st.Type, st.Owner = "automatic", "Automatic"
-	case actor == "you":
+	case asksYou || actor == "you":
 		st.Type, st.Owner = "you", "You"
 	case actor == "reviewers":
 		st.Type, st.Owner = "person", personName(who)
@@ -385,6 +387,19 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 		}
 		if st.Run == "" && kind == "working" && actor == "operators" {
 			st.Run = "agent"
+		}
+	}
+	if asksYou {
+		st.State, st.Run, st.ModelID = "active", "", ""
+		if !strings.HasPrefix(st.Text, "Needs you") {
+			st.Text = "Needs you"
+		}
+		st.Ask = strings.TrimSpace(s.Ask)
+		if s.Decision != nil && strings.TrimSpace(s.Decision.Question) != "" {
+			st.Ask = strings.TrimSpace(s.Decision.Question)
+		}
+		if st.Ask != "" {
+			return st
 		}
 	}
 	if st.Type == "you" && st.State == "active" {
@@ -779,6 +794,7 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 	case s.State == "active":
 		switch {
 		case s.Type == "you":
+			s.Wait = s.Ask // the question, on the card
 		case s.Asleep:
 			s.Wait = "Asleep until " + treeWaitText.ReplaceAllString(s.Text, "")
 		case strings.HasPrefix(s.Text, "Waiting"), strings.HasPrefix(s.Text, "Stuck"), s.Text == "State missing", strings.HasPrefix(s.Text, "Invalid"):

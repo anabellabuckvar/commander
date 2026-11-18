@@ -273,6 +273,7 @@
       "state": "active",
       "col": 0,
       "own": "You",
+      "wt": "Load the three credential values?",
       "ask": "Load the three credential values?",
       "text": "Needs you: Load the three credential values?",
       "since": 1799997000,

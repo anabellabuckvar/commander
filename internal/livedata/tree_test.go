@@ -132,7 +132,7 @@ func TestBuildTree(t *testing.T) {
 	check("w1.1.3", "notstarted", "Review agent", "", 1)
 	check("w1.1.4", "notstarted", "You", "", 2)
 	check("w1.2.1", "active", "Implementer agent · asleep", "Asleep until prod deploy with abc123", 0)
-	check("w1.2.2", "active", "You", "", 0)
+	check("w1.2.2", "active", "You", "Load the three credential values?", 0)
 	check("w1.3.1", "notstarted", "Implementer agent", "After 1.1", 3)
 	check("w1.4.1", "notstarted", "Implementer agent", "Parked", 1)
 	check("w2.2", "active", "Platform team", "Waiting for review: waiting on Platform team (#77)", 0)
@@ -365,5 +365,21 @@ func TestTreeAutomaticStep(t *testing.T) {
 	}
 	if r := tr.Rows[0]; r.Status[0] != (TreeLine{"automatic", "Waiting for prod deploy with 53c4be7"}) {
 		t.Fatalf("row status: %+v", r.Status)
+	}
+}
+
+// vibe-apps-zq9h.6.66.38 (Nov 18): its agent asked Eric a question and the card
+// read "Implementer agent · Not started". It is his red card, with the question.
+func TestTreeAgentQuestionIsYourCard(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "a", Title: "Complete", Status: "open", Steps: []SnapStep{
+		{BeadID: "a.1", Title: "Address the requested changes", Status: "open", Lane: "agents", State: "needs-user", Ask: "Keep the old endpoint for one release?"},
+	}}},
+		Display: &Display{Workstreams: []BoardRow{{Key: "app:a", N: 1, Diagram: &Diagram{ID: "a", Steps: []DiagramStep{
+			{ID: "a.1", Title: "Address the requested changes", Actor: "operators", Kind: "idle", Text: "Not started"},
+		}}}}}}
+	tr := BuildTree(snap, 0)
+	s := tr.Steps[0]
+	if s.Type != "you" || s.State != "active" || s.Own != "You" || s.Wait != "Keep the old endpoint for one release?" || s.Col != 0 || tr.NeedsYou != 1 {
+		t.Fatalf("card: %+v (needs you %d)", s, tr.NeedsYou)
 	}
 }
