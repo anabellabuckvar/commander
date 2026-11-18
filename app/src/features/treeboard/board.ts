@@ -52,7 +52,7 @@ function progHtml(pct: number, title?: string) {
   return `<span class="pr" title="${esc(title ?? p + '% done')}"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">${mark}</svg><span class="pct">${p}%</span></span>`
 }
 
-const SIDE = `
+const SHELL = `
 <div class="page">
   <header class="appbar">
     <div class="ab-side">
@@ -61,13 +61,6 @@ const SIDE = `
       <button type="button" class="needbtn" data-tb="need" aria-pressed="false" title="Show only what needs you"><i></i><span data-tb="needN"></span> need you</button>
       <div class="tb-linear" data-tb="linear"></div>
     </div>
-  </header>
-  <div class="view"><div class="graph" data-tb="sideGraph"><div class="canvas" data-tb="treeCanvas"></div></div></div>
-</div>`
-
-const MAIN = `
-<div class="page">
-  <header class="appbar">
     <div class="ab-main" role="search">
       <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input data-tb="q" type="search" placeholder="Search workstreams and steps" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
       <div class="fwrap">
@@ -98,16 +91,12 @@ const MAIN = `
 </div>
 <div class="sheet" data-tb="sheet" hidden><div class="in"><div class="tb-panel" data-tb="panel"></div><div class="tb-inspector" data-tb="inspector"></div></div></div>`
 
-// mountBoard draws the board in two panes: side (the app's sidebar: its header and
-// the tree) and main (the middle pane: its header, the Now/Next board and the
-// popup). Their rows are kept the same height and scroll together.
-export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOptions): Board {
-  side.innerHTML = SIDE
-  main.innerHTML = MAIN
-  const root = main
-  const both = [side, main]
-  const $ = <T extends HTMLElement = HTMLElement>(k: string) => (side.querySelector(`[data-tb="${k}"]`) ?? main.querySelector(`[data-tb="${k}"]`)) as T
-  const treeEl = $('treeCanvas')
+// mountBoard draws the board as the prototype does: one header bar split at the
+// tree's width, and one grid in which each workstream is one row across its tree
+// cell and its board cells, so the two always line up.
+export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
+  root.innerHTML = SHELL
+  const $ = <T extends HTMLElement = HTMLElement>(k: string) => root.querySelector(`[data-tb="${k}"]`) as T
   const canvasEl = $('canvas'),
     sheetEl = $('sheet'),
     panelEl = $('panel'),
@@ -202,7 +191,7 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
   const timerHtml = (n: Node) => (n.since && n.since > 0 ? `<span class="tm" data-since="${n.since * 1000}" title="Time on this step">${ago(n.since * 1000)}</span>` : '')
   const timer = setInterval(
     () =>
-      both.flatMap((r) => [...r.querySelectorAll<HTMLElement>('.tm')]).forEach((el) => {
+      root.querySelectorAll<HTMLElement>('.tm').forEach((el) => {
         const t = ago(+(el.dataset.since ?? 0))
         if (t === el.textContent) return
         el.classList.add('swap')
@@ -280,18 +269,13 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
 
   function render() {
     header()
-    const frag = document.createDocumentFragment(),
-      treeFrag = document.createDocumentFragment()
+    const frag = document.createDocumentFragment()
     canvasEl.innerHTML = ''
-    treeEl.innerHTML = ''
     els = {}
     const R = Math.max(1, ...tree.steps.filter(open).map((n) => n.col))
-    treeEl.style.gridTemplateColumns = 'minmax(0, 1fr)'
-    canvasEl.style.gridTemplateColumns = `var(--noww) repeat(${R}, var(--colw))`
-    for (const c of [treeEl, canvasEl]) {
-      c.style.gridTemplateRows = 'auto'
-      c.style.gridAutoRows = 'minmax(64px, auto)'
-    }
+    canvasEl.style.gridTemplateColumns = `var(--treew) var(--noww) repeat(${R}, var(--colw))`
+    canvasEl.style.gridTemplateRows = 'auto'
+    canvasEl.style.gridAutoRows = 'minmax(64px, auto)'
     // a search or an owner filter looks inside collapsed workstreams too
     const seek = filtersOn()
     const anc = (r: TreeRow) => {
@@ -315,25 +299,15 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     $('fCount').textContent = fOn ? `${rowsShown.filter((r) => !kids(r.id).length).length} of ${leaves.length} workstreams` : ''
     const nowCol = 2,
       lastRow = rowsShown.length + 2
-    // col counts the tree as column 1: it goes to the sidebar grid, the rest to the board's (one to the left).
-    const put = (to: DocumentFragment, cls: string, row: number | string, col: string, html?: string, rid?: string) => {
+    const add = (cls: string, row: number | string, col: number | string, html?: string, rid?: string) => {
       const d = document.createElement('div')
       d.className = cls
       if (rid) d.dataset.row = rid
       d.style.gridRow = String(row)
-      d.style.gridColumn = col
+      d.style.gridColumn = String(col)
       if (html) d.innerHTML = html
-      to.appendChild(d)
+      frag.appendChild(d)
       return d
-    }
-    const add = (cls: string, row: number | string, col: number | string, html?: string, rid?: string) => {
-      if (col === 1) return put(treeFrag, cls, row, '1', html, rid)
-      if (col === '1 / -1') {
-        put(treeFrag, cls, row, '1 / -1', undefined, rid)
-        return put(frag, cls, row, '1 / -1', html, rid)
-      }
-      if (typeof col === 'number') return put(frag, cls, row, String(col - 1), html, rid)
-      return put(frag, cls, row, col.replace(/^(\d+)/, (m) => String(+m - 1)), html, rid)
     }
     add('band', `1 / ${lastRow}`, nowCol)
     add('tree hd', 1, 1, 'Workstreams')
@@ -382,9 +356,7 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     })
     if (!rowsShown.length) add('fempty', 2, '1 / -1', 'No workstreams match these filters.')
     canvasEl.appendChild(frag)
-    treeEl.appendChild(treeFrag)
     shown = rowsShown
-    alignPanes()
     drawTree()
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('class', 'edges')
@@ -394,34 +366,14 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     applySel()
   }
 
-  // The two panes' rows and headers are the same height: each row is as tall as the taller side.
-  // The two headers are one height, so the WORKSTREAMS and NOW header rows line up. Re-run when either
-  // header's content changes size (the Linear bar renders after the board).
-  function alignHeaders() {
-    const hs = [side, main].map((r) => r.querySelector<HTMLElement>('.appbar'))
-    hs.forEach((h) => h && (h.style.minHeight = ''))
-    const hh = Math.max(...hs.map((h) => h?.offsetHeight ?? 0))
-    hs.forEach((h) => h && (h.style.minHeight = hh + 'px'))
-  }
-  function alignPanes() {
-    alignHeaders()
-    const tracks = [treeEl, canvasEl].map((c) => {
-      c.style.gridTemplateRows = ''
-      return getComputedStyle(c).gridTemplateRows.split(' ').map(parseFloat)
-    })
-    const n = Math.max(tracks[0].length, tracks[1].length)
-    const rows = Array.from({ length: n }, (_, i) => Math.max(tracks[0][i] || 0, tracks[1][i] || 0))
-    if (rows.every((h) => h > 0)) for (const c of [treeEl, canvasEl]) c.style.gridTemplateRows = rows.map((h) => h + 'px').join(' ')
-  }
-
   // Tree lines, placed from measurements: read every number's box first, then write the lines.
   function drawTree() {
-    const S = parseFloat(getComputedStyle(side).getPropertyValue('--step')) || 28,
+    const S = parseFloat(getComputedStyle(root).getPropertyValue('--step')) || 28,
       W = 1.5,
       cells: Record<string, HTMLElement> = {},
       m: Record<string, { h: number; left: number; cy: number; under: number; cx: number }> = {},
       stacked = S < 20
-    treeEl.querySelectorAll<HTMLElement>('.tree[data-ws]').forEach((t) => (cells[t.dataset.ws as string] = t))
+    canvasEl.querySelectorAll<HTMLElement>('.tree[data-ws]').forEach((t) => (cells[t.dataset.ws as string] = t))
     shown.forEach((r) => {
       const t = cells[r.id],
         tl = t.querySelector('.tl') as HTMLElement,
@@ -513,10 +465,9 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
   let lastSel = ''
   function applySel() {
     const svg = canvasEl.querySelector('svg.edges')
-    ;[treeEl, canvasEl].forEach((c) => c.querySelectorAll('.on,.sel,.wsel').forEach((e) => e.classList.remove('on', 'sel', 'wsel')))
+    canvasEl.querySelectorAll('.on,.sel,.wsel').forEach((e) => e.classList.remove('on', 'sel', 'wsel'))
     const any = !!(sel || wsSel)
     canvasEl.classList.toggle('selecting', any)
-    treeEl.classList.toggle('selecting', any)
     svg?.classList.toggle('selecting', any)
     root.classList.toggle('sheet-open', any || chatOpen)
     sheetEl.hidden = !any
@@ -553,10 +504,10 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     ;[...rows].forEach((r) => {
       for (let p = rowsById[r]?.parent; p; p = rowsById[p]?.parent) rows.add(p)
     })
-    ;[treeEl, canvasEl].forEach((c) => c.querySelectorAll<HTMLElement>('[data-row]').forEach((e) => e.classList.toggle('on', rows.has(e.dataset.row as string))))
+    canvasEl.querySelectorAll<HTMLElement>('[data-row]').forEach((e) => e.classList.toggle('on', rows.has(e.dataset.row as string)))
     svg?.querySelectorAll<SVGGElement>('g').forEach((g) => g.classList.toggle('on', chain.has(g.dataset.a as string) && chain.has(g.dataset.b as string)))
     if (!sel) {
-      const t = treeEl.querySelector(`.tree[data-ws="${cssEscape(wsSel as string)}"]`)
+      const t = canvasEl.querySelector(`.tree[data-ws="${cssEscape(wsSel as string)}"]`)
       if (t) t.classList.add('wsel')
       panelEl.innerHTML = wsPanel(rowsById[wsSel as string])
       opts.onPanel?.(panelEl.querySelector<HTMLElement>('[data-tb="wslinear"]'), rowsById[wsSel as string])
@@ -718,7 +669,7 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
       wsSel = wg.dataset.wsgo as string
       sel = null
       applySel()
-      treeEl.querySelector(`.tree[data-ws="${cssEscape(wsSel)}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+      canvasEl.querySelector(`.tree[data-ws="${cssEscape(wsSel)}"]`)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
       return
     }
     const tg = target.closest<HTMLElement>('[data-toggle]')
@@ -811,37 +762,18 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     render()
   }
   const onResize = () => {
-    alignPanes()
     drawTree()
     drawEdges()
   }
-  // The two panes scroll together, row for row.
-  const sideGraph = $('sideGraph'),
-    mainGraph = canvasEl.parentElement as HTMLElement
-  let syncing = false
-  const sync = (from: HTMLElement, to: HTMLElement) => () => {
-    if (syncing) return
-    syncing = true
-    to.scrollTop = from.scrollTop
-    requestAnimationFrame(() => (syncing = false))
-  }
-  const fromSide = sync(sideGraph, mainGraph),
-    fromMain = sync(mainGraph, sideGraph)
-  sideGraph.addEventListener('scroll', fromSide)
-  mainGraph.addEventListener('scroll', fromMain)
   const sized = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => onResize()) : null
-  sized?.observe(side)
-  sized?.observe(main)
-  // Header content (not the headers, whose min-height is set above) drives the header alignment.
-  const headSized = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => requestAnimationFrame(alignHeaders)) : null
-  ;[side, main].forEach((r) => r.querySelectorAll<HTMLElement>('.ab-side > *, .ab-main > *').forEach((el) => headSized?.observe(el)))
-  both.forEach((r) => r.addEventListener('click', onClick))
-  both.forEach((r) => r.addEventListener('mouseover', onOver))
+  sized?.observe(root)
+  root.addEventListener('click', onClick)
+  root.addEventListener('mouseover', onOver)
   document.addEventListener('keydown', onKey)
   qEl.addEventListener('input', onInput)
   hdBox.addEventListener('change', onHide)
   window.addEventListener('resize', onResize)
-  if (typeof document !== 'undefined' && document.fonts?.ready) void document.fonts.ready.then(() => main.isConnected && onResize())
+  if (typeof document !== 'undefined' && document.fonts?.ready) void document.fonts.ready.then(() => root.isConnected && onResize())
 
   // Workflow templates, from Commander's shape templates (internal/beads/shape_templates.go).
   $('flowList').innerHTML = WORKFLOWS.map(
@@ -869,16 +801,12 @@ export function mountBoard(side: HTMLElement, main: HTMLElement, opts: BoardOpti
     destroy() {
       clearInterval(timer)
       clearTimeout(qT)
-      both.forEach((r) => r.removeEventListener('click', onClick))
-      both.forEach((r) => r.removeEventListener('mouseover', onOver))
-      sideGraph.removeEventListener('scroll', fromSide)
-      mainGraph.removeEventListener('scroll', fromMain)
+      root.removeEventListener('click', onClick)
+      root.removeEventListener('mouseover', onOver)
       sized?.disconnect()
-      headSized?.disconnect()
       document.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', onResize)
-      side.innerHTML = ''
-      main.innerHTML = ''
+      root.innerHTML = ''
     },
     setChatOpen(o: boolean) {
       chatOpen = o

@@ -1,17 +1,16 @@
-// The tree board in the app's two panes: TreeSidebar (the sidebar: its small
-// header and the workstream tree) and TreeMain (the middle pane: its header,
-// the Now/Next board and the details popup). board.ts draws both from cmdrd's
-// tree (GET /api/tree) with each row the same height in both, scrolling
-// together. The popup holds the new details for what is selected, then the
+// The tree board where the app's sidebar and middle pane were: one header bar
+// split at the tree's width and one grid of rows, the tree column first, drawn
+// by board.ts from cmdrd's tree (GET /api/tree), so the tree and the board
+// always line up. The popup holds the new details for what is selected, then the
 // original focus pane's tabs (Workflow, a NEEDS YOU decision card, tabs an
 // agent opened). What is open rides along with each message to the Commander.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { create } from 'zustand'
 import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
 import { askKey, board as boardVM, wsKey } from '../../renderer/src/viewmodel'
 import { host } from '../../renderer/src/host'
+import { Splitter } from '../../renderer/src/components/Splitter'
 import { useStore } from '../../renderer/src/store'
 import { linearUrl } from '../linear/Ticket'
 import { useIntegrations } from '../linear/settings'
@@ -24,19 +23,6 @@ export async function fetchTree(apiUrl: string, token: string): Promise<Tree> {
   const res = await fetch(`${apiUrl}/api/tree`, { headers: { Authorization: `Bearer ${token}` } })
   if (!res.ok) throw new Error(`tree: HTTP ${res.status}`)
   return (await res.json()) as Tree
-}
-
-// The sidebar pane's element, for TreeMain to draw the tree into.
-const useSidePane = create<{ el: HTMLElement | null }>(() => ({ el: null }))
-
-/** TreeSidebar: the app's sidebar, drawn by TreeMain's board. */
-export function TreeSidebar() {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    useSidePane.setState({ el: ref.current })
-    return () => useSidePane.setState({ el: null })
-  }, [])
-  return <div className="tb tb-side" ref={ref} />
 }
 
 // focusFor points the original focus pane at what the tree has open: a step with a
@@ -58,10 +44,9 @@ function focusFor(sel: Selection | null, tree: Tree | null) {
   if (nested && nested.id !== top.bead_id) st.openWorkflow(wsKey(top), nested.id, 'workflow')
 }
 
-/** TreeMain: the app's middle pane, and the board that draws both panes. */
-export function TreeMain() {
+/** TreeBoard: where the app's sidebar and middle pane were, one grid: the tree column (as wide as the sidebar, resized by the app's left splitter) and the board. */
+export function TreeBoard({ treeWidth, onDragTree, onDragDone }: { treeWidth: number; onDragTree(dx: number): void; onDragDone(): void }) {
   const ref = useRef<HTMLDivElement>(null)
-  const sideEl = useSidePane((s) => s.el)
   const board = useRef<Board | null>(null)
   const tree = useRef<Tree | null>(null)
   const [error, setError] = useState('')
@@ -77,8 +62,8 @@ export function TreeMain() {
   const openProgress = () => useStore.getState().select({ kind: 'progress' })
 
   useEffect(() => {
-    if (!sideEl || !ref.current) return
-    const b = mountBoard(sideEl, ref.current, {
+    if (!ref.current) return
+    const b = mountBoard(ref.current, {
       onSelect: (s) => {
         setTreeSelection(s)
         focusFor(s, tree.current)
@@ -106,7 +91,7 @@ export function TreeMain() {
       b.destroy()
       board.current = null
     }
-  }, [sideEl])
+  }, [])
 
   useEffect(() => {
     if (!cfg || cfg.demo || !cfg.apiUrl) return
@@ -127,7 +112,10 @@ export function TreeMain() {
 
   return (
     <div className="tb-main-host">
-      <div className="tb tb-main" ref={ref} />
+      <div className="tb" ref={ref} style={{ ['--treew' as string]: `${treeWidth}px` }} />
+      <div className="tb-treesplit" style={{ left: treeWidth }}>
+        <Splitter side="left" onDrag={onDragTree} onDone={onDragDone} />
+      </div>
       {slots && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, slots.linear)}
       {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} cycles={false} />, wsSlot.el)}
       {error && (

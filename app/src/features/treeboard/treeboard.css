@@ -345,24 +345,19 @@
 .tb .tb-linear:empty, .tb .tb-linear-ws:empty { display: none }
 .tb .tb-linear .my-progress, .tb .tb-linear-ws .my-progress { width: 100%; margin: 0 }
 
-/* Two panes of the app: .tb-side in the sidebar, .tb-main in the middle pane, each filling its slot. */
-.tb.tb-side, .tb.tb-main { position: relative; height: 100%; min-width: 0; overflow: hidden; padding: 0 }
-.tb.tb-side .page, .tb.tb-main .page { height: 100%; padding: 0 }
-.tb.tb-side .appbar, .tb.tb-main .appbar { border-radius: 0; border-left: 0; border-right: 0; border-top: 0 }
-.tb.tb-side .ab-side { width: 100%; border-right: 0 }
-.tb.tb-side .graph, .tb.tb-main .graph { border-radius: 0; border-left: 0; border-right: 0; border-bottom: 0 }
-.tb.tb-side .graph { scrollbar-width: none } .tb.tb-side .graph::-webkit-scrollbar { display: none }
-.tb.tb-side .canvas { min-width: 0; width: 100% }
-.tb.tb-side .tree { position: relative; border-right: 0 }
-.tb.tb-main .rules { left: 0 }
-.tb.tb-main .sheet { position: absolute }
-.tb.tb-main .ab-main .tabs { margin-left: auto }
-
 .tb-main-host { position: relative; height: 100%; min-width: 0; overflow: hidden }
-.tb.tb-main .abtn[data-tb="chat"] { display: none }
+.tb-main-host > .tb { position: relative; height: 100%; min-width: 0; overflow: hidden; padding: 0 }
+.tb-main-host > .tb .page { height: 100%; padding: 0 }
+.tb-main-host > .tb .appbar, .tb-main-host > .tb .graph { border-radius: 0; border-left: 0; border-right: 0 }
+.tb-main-host > .tb .appbar { border-top: 0 }
+.tb-main-host > .tb .graph { border-bottom: 0 }
+.tb-main-host > .tb .sheet { position: absolute }
+.tb-main-host > .tb .abtn[data-tb="chat"] { display: none }
+/* the app's left splitter, at the tree column's edge: it resizes the tree */
+.tb-treesplit { position: absolute; top: 0; bottom: 0; width: 1px; z-index: 18; display: flex }
+.tb-treesplit > .splitter { height: 100% }
 
-/* Compact, fixed-height headers: both panes' header bars and both table header rows have one set height,
-   so the WORKSTREAMS and NOW rows always line up (no measuring needed). */
+/* Compact header bar; the table's header row is one grid row, so WORKSTREAMS and NOW share it. */
 .tb { --abh: 92px; --hdh: 38px }
 .tb .appbar { height: var(--abh); min-height: var(--abh) !important; max-height: var(--abh); overflow: hidden }
 .tb .ab-side { flex-wrap: wrap; align-content: center; gap: 6px 10px; padding: 8px 12px 8px var(--gut) }

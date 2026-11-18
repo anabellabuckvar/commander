@@ -3,7 +3,7 @@ import { useLinearSprint } from '../../features/linear/sprint'
 import { useCallback, useEffect, useState } from 'react'
 import { connect, useStore } from './store'
 import { host, isMac } from './host'
-import { SelectionChip, TreeMain, TreeSidebar } from '../../features/treeboard/TreeBoard'
+import { SelectionChip, TreeBoard } from '../../features/treeboard/TreeBoard'
 import { Rail } from './components/Rail'
 import { TopBar } from './components/TopBar'
 import { Splitter } from './components/Splitter'
@@ -154,11 +154,9 @@ export function App() {
     <div className={`app platform-${platform}${host ? ' in-host' : ' in-web'}`}>
       <TopBar left={RAIL + nav + 1} chat={chat} />
       <Rail />
-      <div className="app-body" style={{ gridTemplateColumns: `${nav}px 1px minmax(${MIDDLE_MIN}px, 1fr)` }}>
-        <aside className="col col-nav">
-          <TreeSidebar />
-        </aside>
-        <Splitter side="left" onDrag={dragNav} onDone={save} />
+      {/* The sidebar and the middle pane are one element, the tree board: its tree column is the
+          sidebar's width and the left splitter at its edge resizes it. */}
+      <div className="app-body" style={{ gridTemplateColumns: `minmax(${nav + 1 + MIDDLE_MIN}px, 1fr)` }}>
         {/* With something in focus, the focus pane and the chat; with nothing in
             focus, the chat alone. Only hidden under a page, so the chat keeps its
             draft and its scroll. */}
@@ -167,11 +165,11 @@ export function App() {
           {page === 'progress' && (stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <ProgressView />)}
           <div
             className={`main-row${tabbed ? (chatTab ? ' tabbed show-chat' : ' tabbed') : ''}${page ? ' under-page' : ''}`}
-            style={{ gridTemplateColumns: focused && !narrow ? `minmax(${PANEL_MIN}px, 1fr) 1px ${chat}px` : 'minmax(0, 1fr)' }}
+            style={{ gridTemplateColumns: focused && !narrow ? `minmax(${nav + 1 + PANEL_MIN}px, 1fr) 1px ${chat}px` : 'minmax(0, 1fr)' }}
           >
             {focused && (
               <section className="col col-inspector">
-                {stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <TreeMain />}
+                {stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <TreeBoard treeWidth={nav} onDragTree={dragNav} onDragDone={save} />}
               </section>
             )}
             {focused && !narrow && <Splitter side="right" onDrag={dragChat} onDone={save} />}

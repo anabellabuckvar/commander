@@ -19,15 +19,10 @@ afterEach(() => {
 })
 
 function mount(tree: Tree, onSelect: (s: Selection | null) => void = () => {}) {
-  // the app's sidebar and middle pane, side by side
   const root = document.createElement('div')
-  const side = document.createElement('div')
-  const main = document.createElement('div')
-  side.className = 'tb tb-side'
-  main.className = 'tb tb-main'
-  root.append(side, main)
+  root.className = 'tb'
   document.body.appendChild(root)
-  board = mountBoard(side, main, { onSelect, onChat: () => {}, linearUrl: () => null, openUrl: () => {} })
+  board = mountBoard(root, { onSelect, onChat: () => {}, linearUrl: () => null, openUrl: () => {} })
   board.update(tree)
   return root
 }
@@ -76,8 +71,8 @@ for (const [name, file] of sources) {
         expect(text(card.querySelector('.wt'))).toBe(s.wt ?? '')
         expect(card.classList.contains(`t-${s.type}`)).toBe(true)
         expect(card.classList.contains(`s-${s.state}`)).toBe(true)
-        // the column cmdrd placed it in: the board pane's grid column 1 is Now
-        expect((card.parentElement as HTMLElement).style.gridColumn).toBe(String(1 + s.col))
+        // the column cmdrd placed it in: grid column 2 is Now (the tree is column 1)
+        expect((card.parentElement as HTMLElement).style.gridColumn).toBe(String(2 + s.col))
       }
     })
 
@@ -104,3 +99,20 @@ for (const [name, file] of sources) {
     })
   })
 }
+
+describe('one grid', () => {
+  it('puts the tree header and the Now header in one grid row, and each workstream in one row across the tree and the board', () => {
+    const tree = JSON.parse(readFileSync(sources[0][1], 'utf8')) as Tree
+    const root = mount(tree)
+    const grids = root.querySelectorAll('.canvas')
+    expect(grids.length).toBe(1)
+    const grid = grids[0] as HTMLElement
+    expect((grid.querySelector('.tree.hd') as HTMLElement).style.gridRow).toBe('1')
+    expect((grid.querySelector('.hd.now') as HTMLElement).style.gridRow).toBe('1')
+    for (const t of grid.querySelectorAll<HTMLElement>('.tree[data-ws]')) {
+      const row = t.style.gridRow
+      const cells = [...grid.querySelectorAll<HTMLElement>(`.cell`)].filter((c) => c.style.gridRow === row)
+      expect(cells.length, t.dataset.ws).toBeGreaterThan(0)
+    }
+  })
+})
