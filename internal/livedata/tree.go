@@ -508,7 +508,7 @@ func (b *treeBuild) finish(order []string, now int64) {
 		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review" || s.Type == "automatic" || s.Type == "person") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
 			s.State = "active"
 			if s.Type == "person" && (s.Text == "" || s.Text == "Not started" || s.Text == "Not reached") {
-				s.Text = "Waiting on " + s.Own
+				s.Text = "Waiting on " + s.Owner
 			}
 		}
 	}
