@@ -401,8 +401,15 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
       for (let p = r.parent; p && m[p]; p = rowsById[p]?.parent, k++) {
         const x = m[p].cx,
           more = later(i, rowsById[p].depth + 1)
-        if (k === 0)
-          out += v(x, 0, more ? me.h : me.cy + W / 2) + `<i class="ln h" data-elbow style="left:${x.toFixed(2)}px;top:${(me.cy - W / 2).toFixed(2)}px;width:${(me.left - 6 - x).toFixed(2)}px"></i>`
+        if (k === 0) {
+          // The last child gets a rounded elbow (as in the prototype); a child with siblings below keeps a straight T.
+          const R = 8
+          if (more) out += v(x, 0, me.h) + `<i class="ln h" data-elbow style="left:${x.toFixed(2)}px;top:${(me.cy - W / 2).toFixed(2)}px;width:${(me.left - 6 - x).toFixed(2)}px"></i>`
+          else
+            out +=
+              v(x, 0, me.cy - R) +
+              `<i class="ln el" data-elbow style="left:${(x - W / 2).toFixed(2)}px;top:${(me.cy - R).toFixed(2)}px;width:${(me.left - 6 - x + W / 2).toFixed(2)}px;height:${(R + W / 2).toFixed(2)}px"></i>`
+        }
         else if (more) out += v(x, 0, me.h)
       }
       if (shown[i + 1] && shown[i + 1].parent === r.id)
