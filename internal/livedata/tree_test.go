@@ -395,3 +395,14 @@ func TestTreeNeedsUserLabelIsYourCard(t *testing.T) {
 		t.Fatalf("card: %+v", s)
 	}
 }
+
+// A review that sent its work back says so, never "Not started".
+func TestTreeSentBackReview(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "a", Title: "Chart open", Status: "open", Steps: []SnapStep{
+		{BeadID: "a.1", Title: "Review: the chart-open-under-2s plan", Status: "open", Lane: "agents", ResultReadyAt: 1, ResultLine: "Final report: **SEND BACK**. The p95 target is measured on the wrong route."},
+	}}}}
+	s := BuildTree(snap, 0).Steps[0]
+	if s.Wait != "Sent back: The p95 target is measured on the wrong route." {
+		t.Fatalf("card: %+v", s)
+	}
+}

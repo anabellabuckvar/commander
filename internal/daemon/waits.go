@@ -81,6 +81,8 @@ type waitWatcher struct {
 	// A cleared wait stays here too: reads can show its label for minutes after
 	// the clear (the list comes from an export), and it must not wake again.
 	woken map[string]bool
+	// refused: writes the door refused, logged once and not retried every poll.
+	refused map[string]bool
 	// checkedAt is when the last poll finished (unix s); every waiting bead is checked each poll.
 	checkedAt atomic.Int64
 	// facts is each bead's review waits as GitHub had them at the last poll.
@@ -185,8 +187,16 @@ func (w *waitWatcher) dropBlockedStart(ctx context.Context, p store.Project, b b
 	if !behind {
 		return false
 	}
+	key := "drop|" + b.ID + "|" + storedLabel(b.Labels, wt)
+	if w.refused[key] {
+		return true // refused before: the board shows it as invalid state; not retried
+	}
 	if err := w.beads.SetLabel(ctx, p.Path, b.ID, storedLabel(b.Labels, wt), false); err != nil {
-		log.Printf("daemon: waits: clear %s on blocked %s: %v", beads.ManagerStartWait, b.ID, err)
+		if w.refused == nil {
+			w.refused = map[string]bool{}
+		}
+		w.refused[key] = true
+		log.Printf("daemon: waits: clear %s on blocked %s was refused (not retried; the step needs the Commander): %v", beads.ManagerStartWait, b.ID, err)
 	}
 	return true
 }
@@ -286,7 +296,8 @@ func hasLabelPrefix(labels []string, prefix string) bool {
 func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, wt beads.Wait, subject, body string) {
 	// An Automatic step's event happened: it closes itself, and the step after it starts.
 	if slices.Contains(b.Labels, beads.AutomaticLabel) {
-		if err := w.beads.CloseWithReason(ctx, p.Path, b.ID, "Automatic: "+subject); err != nil {
+		// Through the guarded close (the shared workflow verifier), like every close.
+		if err := closeWithReason(ctx, p.Name, b.ID, "Automatic: "+subject); err != nil {
 			log.Printf("daemon: waits: close automatic step %s: %v", b.ID, err)
 			return
 		}

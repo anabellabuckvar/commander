@@ -89,6 +89,8 @@ type TreeStep struct {
 	Since    int64  `json:"since,omitempty"`
 	Gate     bool   `json:"gate,omitempty"`
 	Criteria string `json:"ac,omitempty"`
+	// sentBack: what a review said when it sent its work back (its result is ready and not a pass).
+	sentBack string
 }
 
 var (
@@ -351,6 +353,9 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 		since = s.ProgressAt
 	}
 	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
+	if s.ResultReadyAt > 0 && sentBackReport.MatchString(s.ResultLine) {
+		st.sentBack = sentBackWhy(s.ResultLine)
+	}
 	// A step whose agent asked Eric something is his card until he answers.
 	asksYou := s.Status != "closed" && (s.State == "needs-user" || s.QuestionWaiting || s.NeedsUser)
 	switch {
@@ -802,6 +807,9 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 			s.Wait = "Asleep until " + treeWaitText.ReplaceAllString(s.Text, "")
 		case strings.HasPrefix(s.Text, "Waiting"), strings.HasPrefix(s.Text, "Stuck"), s.Text == "State missing", strings.HasPrefix(s.Text, "Invalid"):
 			s.Wait = s.Text
+		case agentish && s.sentBack != "":
+			// It ran and sent the work back: the revision comes before it reruns.
+			s.Wait = "Sent back: " + s.sentBack
 		case agentish:
 			// No live agent on an active agent step: say exactly that (the card must never look like work),
 			// with the step's own status as the reason.
@@ -1074,4 +1082,16 @@ func naturalIDLess(a, b string) bool {
 		return pa[i] < pb[i]
 	}
 	return len(pa) < len(pb)
+}
+
+var sentBackReport = regexp.MustCompile(`(?i)^\s*final report\W*(send back|sent back|sending back|changes requested|blocked|fail|reject|not ready)`)
+var sentBackHead = regexp.MustCompile(`(?i)^\s*final report\W*(send back|sent back|sending back|changes requested|blocked|failed|fail|rejected|reject|not ready)\W*`)
+
+// sentBackWhy is a sent-back report's first line without its verdict and markup.
+func sentBackWhy(line string) string {
+	why := strings.TrimSpace(strings.ReplaceAll(sentBackHead.ReplaceAllString(line, ""), "**", ""))
+	if why == "" {
+		return "the findings are in its report"
+	}
+	return why
 }
