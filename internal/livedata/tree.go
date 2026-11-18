@@ -730,7 +730,8 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 		}
 		s.Wait = ""
 		switch {
-		case s.State == "active":
+		case s.State == "active" && !strings.HasPrefix(s.Title, "Waiting for"):
+			// the title already says what it waits for; otherwise this line does
 			s.Wait = waitingFor(s.Text, s.Title)
 		case s.State == "notstarted":
 			var other []string
@@ -812,11 +813,11 @@ var ownerOrder = []string{"you", "review", "agent", "person", "automatic"}
 
 // waitingFor is an Automatic step's line: what it waits for, in plain words.
 func waitingFor(text, title string) string {
-	if treeWaitText.MatchString(text) {
-		return treeWaitText.ReplaceAllString(text, "Waiting for ")
-	}
 	if strings.HasPrefix(title, "Waiting for") {
 		return title
+	}
+	if treeWaitText.MatchString(text) {
+		return treeWaitText.ReplaceAllString(text, "Waiting for ")
 	}
 	return "Waiting for " + lowerFirst(title)
 }

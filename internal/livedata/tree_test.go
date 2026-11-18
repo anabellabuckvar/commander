@@ -357,7 +357,7 @@ func TestTreeAutomaticStep(t *testing.T) {
 	for _, s := range tr.Steps {
 		steps[s.ID] = s
 	}
-	if s := steps["a.1"]; s.Type != "automatic" || s.Own != "Automatic" || s.State != "active" || s.Col != 0 || s.Wait != "Waiting for prod deploy with 53c4be7" || s.Run != "" {
+	if s := steps["a.1"]; s.Type != "automatic" || s.Own != "Automatic" || s.State != "active" || s.Col != 0 || s.Wait != "" || s.Title != "Waiting for prod deploy with 53c4be7" || s.Run != "" {
 		t.Fatalf("automatic card: %+v", s)
 	}
 	if s := steps["a.2"]; s.State != "notstarted" || s.Col != 1 {
