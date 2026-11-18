@@ -3,11 +3,10 @@ import { useLinearSprint } from '../../features/linear/sprint'
 import { useCallback, useEffect, useState } from 'react'
 import { connect, useStore } from './store'
 import { host, isMac } from './host'
-import { Navigator } from './components/Navigator'
+import { SelectionChip, TreeMain, TreeSidebar } from '../../features/treeboard/TreeBoard'
 import { Rail } from './components/Rail'
 import { TopBar } from './components/TopBar'
 import { Splitter } from './components/Splitter'
-import { InspectorColumn } from './components/InspectorColumn'
 import { ProgressView } from './components/ProgressView'
 import { WorkflowsView } from './components/WorkflowsView'
 import { isPage } from './viewmodel'
@@ -17,8 +16,6 @@ import { useShell } from './shell'
 import { HEADER_SLOT_ID } from '../../features/chat/Header'
 import { applyTheme, loadTheme } from './theme'
 import { StartScreen } from './components/StartScreen'
-import { TreeBoard } from '../../features/treeboard/TreeBoard'
-import { useBoardMode } from '../../features/treeboard/mode'
 
 const RAIL = 56
 const NAV = { def: 340, min: 260, max: 520 }
@@ -129,7 +126,8 @@ export function App() {
   }, [conn])
 
   const page = useStore((s) => (isPage(s.selected) ? s.selected.kind : null))
-  const focused = useStore((s) => s.selected.kind !== 'commander' && !isPage(s.selected))
+  // The middle pane is the tree board, always shown beside the chat.
+  const focused = true
   const narrow = useStore((s) => s.narrow)
   const chatTab = useStore((s) => s.chatTab)
   const nav = clamp(sizes.nav, NAV.min, Math.min(NAV.max, winW - RAIL - MIDDLE_MIN))
@@ -144,7 +142,6 @@ export function App() {
       return s
     })
   }, [])
-  const board = useBoardMode((s) => s.mode)
   const isNarrow = winW - RAIL - nav - CHAT.min < PANE_SPLIT_MIN
   useEffect(() => useStore.getState().setNarrow(isNarrow), [isNarrow])
   const tabbed = focused && narrow
@@ -153,22 +150,13 @@ export function App() {
 
   if (conn === 'no-token') return <NoToken />
 
-  // The tree board is the default view; the classic board stays one click away.
-  if (board === 'tree')
-    return (
-      <div className={`app app-tree platform-${platform}${host ? ' in-host' : ' in-web'}`}>
-        <TreeBoard />
-        <StartScreen />
-      </div>
-    )
-
   return (
     <div className={`app platform-${platform}${host ? ' in-host' : ' in-web'}`}>
       <TopBar left={RAIL + nav + 1} chat={chat} />
       <Rail />
       <div className="app-body" style={{ gridTemplateColumns: `${nav}px 1px minmax(${MIDDLE_MIN}px, 1fr)` }}>
         <aside className="col col-nav">
-          <Navigator />
+          <TreeSidebar />
         </aside>
         <Splitter side="left" onDrag={dragNav} onDone={save} />
         {/* With something in focus, the focus pane and the chat; with nothing in
@@ -183,7 +171,7 @@ export function App() {
           >
             {focused && (
               <section className="col col-inspector">
-                {stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <InspectorColumn />}
+                {stateUnavailable ? <><ActivityFreshness /><p role="status">Live state unavailable.</p></> : <TreeMain />}
               </section>
             )}
             {focused && !narrow && <Splitter side="right" onDrag={dragChat} onDone={save} />}
@@ -191,6 +179,7 @@ export function App() {
                 chat pane can grow, so a wide pane never stretches the text or the input. */}
             <section className="col col-middle" style={{ ['--chat-col' as string]: `${Math.min((tabbed ? winW - RAIL - nav : chat) - 48, CHAT_COL_MAX)}px` }}>
               <ChatControls />
+              <SelectionChip />
               <div className="chat-slot">
                 <ChatSlot />
               </div>

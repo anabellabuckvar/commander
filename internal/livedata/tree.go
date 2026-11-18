@@ -466,6 +466,10 @@ func (b *treeBuild) finish(order []string, now int64) {
 			s.State = "active"
 		}
 	}
+	// Numbers are places among the workstreams shown: open ones first, in rank
+	// order, so the first one shown is 1 and its children 1.1, 1.2; done ones
+	// (hidden by default) follow.
+	order = b.renumber(order)
 	// columns: distance from now, shared by every workstream
 	rank := map[string]int{}
 	var r func(string) int
@@ -564,6 +568,37 @@ func (b *treeBuild) finish(order []string, now int64) {
 			}
 		}
 	}
+}
+
+// renumber labels the rows by their place among their open siblings (done ones
+// after), and returns the rows in that order, each before its children.
+func (b *treeBuild) renumber(order []string) []string {
+	var roots []string
+	for _, id := range order {
+		if b.rows[id].Parent == "" {
+			roots = append(roots, id)
+		}
+	}
+	var out []string
+	var level func(ids []string, prefix string, depth int)
+	level = func(ids []string, prefix string, depth int) {
+		var open, done []string
+		for _, id := range ids {
+			if b.done(id) {
+				done = append(done, id)
+			} else {
+				open = append(open, id)
+			}
+		}
+		for i, id := range append(open, done...) {
+			r := b.rows[id]
+			r.Label, r.Depth = prefix+strconv.Itoa(i+1), depth
+			out = append(out, id)
+			level(b.kids[id], r.Label+".", depth+1)
+		}
+	}
+	level(roots, "", 0)
+	return out
 }
 
 func sortedKeys[V any](m map[string]V) []string {

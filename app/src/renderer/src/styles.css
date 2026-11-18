@@ -7694,26 +7694,3 @@ button.xf-step.xf-open:hover {
 .wf-who { color: var(--text-3); font-size: 12px; white-space: nowrap; }
 .wf-note { margin: 12px 0 0; color: var(--text-3); font-size: 12.5px; }
 @media (max-width: 640px) { .wf-rules { grid-template-columns: 1fr; } }
-
-/* The switch to the tree board, beside Back and Forward. */
-.app-top-left .board-switch {
-  margin-left: 8px;
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
-.app-top-left .board-switch:hover {
-  color: inherit;
-}
-
-/* The tree board fills the window: it has no rail or top bar of the app grid. */
-.app.app-tree {
-  display: block;
-}

@@ -22,7 +22,9 @@ import { setWeb } from '../pageCapture'
 import { setPanel } from '../screen'
 import { useChatTarget } from './ChatSlot'
 
-export function InspectorColumn() {
+// hideOverview: inside the tree board's popup, where there is no Overview tab (it lives in a browser tab now).
+export function InspectorColumn({ hideOverview = false }: { hideOverview?: boolean } = {}) {
+  const firstTab = hideOverview ? 'workflow' : 'overview'
   const snapshot = useStore((s) => s.snapshot)
   const selected = useStore((s) => s.selected)
   const apis = useApis()
@@ -63,7 +65,7 @@ export function InspectorColumn() {
   useEffect(() => {
     if (!selKey) return
     // A decision reads on its workstream's Overview; its choices sit above the chat's input.
-    setActivePinned('overview')
+    setActivePinned(firstTab)
     useStore.getState().setChatTab(false)
   }, [selKey, selectedAt])
 
@@ -89,12 +91,12 @@ export function InspectorColumn() {
   }, [snapshot, selected, workflowOpen, card])
   const focusedWs = selected.kind === 'ws' ? selected.key : ''
   useEffect(() => {
-    if (focusedWs && !selKey) setActivePinned('overview')
+    if (focusedWs && !selKey) setActivePinned(firstTab)
     // A new focus opens on Overview; snapshots alone do not move the tab.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedWs])
   useEffect(() => {
-    if (workflowOpen && selected.kind === 'ws' && workflowOpen.ws === selected.key) setActivePinned(workflowOpen.tab ?? 'overview')
+    if (workflowOpen && selected.kind === 'ws' && workflowOpen.ws === selected.key) setActivePinned(hideOverview && workflowOpen.tab === 'overview' ? 'workflow' : (workflowOpen.tab ?? firstTab))
     // Only a new click brings the tab forward; snapshots and the selection alone do not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowOpen?.at])
@@ -144,12 +146,14 @@ export function InspectorColumn() {
   const pinned = useMemo<PinnedTab[]>(() => {
     const tabs: PinnedTab[] = []
     if (narrow) tabs.push({ id: 'chat', title: 'Chat', content: null, dot: !chatTab && chatSeq > seenSeq })
-    if (flow) {
+    if (flow && !hideOverview) {
       tabs.push({
         id: 'overview',
         title: 'Overview',
         content: <OverviewBoundary key={`o${flow.key}`}><OverviewPage ws={flow.ws} row={flow.boardRow} track={flow.track} onWorkflow={() => setActivePinned('workflow')} onTrack={(id) => useStore.getState().openWorkflow(flow.row, id)} /></OverviewBoundary>,
       })
+    }
+    if (flow) {
       tabs.push({
         id: 'workflow',
         title: 'Workflow',
@@ -171,7 +175,7 @@ export function InspectorColumn() {
       })
     }
     return tabs
-  }, [flow, narrow, chatTab, chatSeq, seenSeq])
+  }, [flow, narrow, chatTab, chatSeq, seenSeq, hideOverview])
   // A decision tab an agent opened stays only while that decision waits on you,
   // named by its question rather than its bead id. The open decision's own tab
   // already shows it.

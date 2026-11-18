@@ -1,35 +1,25 @@
-// TreeBoard: the tree board as the app's main view. The board itself is drawn
-// imperatively (board.ts) from cmdrd's tree (GET /api/tree), refetched when the
-// snapshot version moves. Below the right panel sits the Commander's chat: what
-// Eric has open rides along with each message (selection.ts).
+// The tree board in the app's two panes: TreeSidebar (the sidebar: its small
+// header and the workstream tree) and TreeMain (the middle pane: its header,
+// the Now/Next board and the details popup). board.ts draws both from cmdrd's
+// tree (GET /api/tree) with each row the same height in both, scrolling
+// together. The popup holds the new details for what is selected, then the
+// original focus pane's tabs (Workflow, a NEEDS YOU decision card, tabs an
+// agent opened). What is open rides along with each message to the Commander.
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { create } from 'zustand'
 import { MyProgress, progressWorkstreams } from '../linear/MyProgress'
-import { board as boardVM } from '../../renderer/src/viewmodel'
-import { ChatSlot } from '../../renderer/src/components/ChatSlot'
+import { askKey, board as boardVM, wsKey } from '../../renderer/src/viewmodel'
+import { InspectorColumn } from '../../renderer/src/components/InspectorColumn'
 import { host } from '../../renderer/src/host'
 import { useStore } from '../../renderer/src/store'
 import { linearUrl } from '../linear/Ticket'
 import { useIntegrations } from '../linear/settings'
 import { mountBoard, type Board } from './board'
-import { setBoardMode } from './mode'
-import { setTreeSelection } from './selection'
+import { setTreeSelection, useTreeSelection } from './selection'
 import type { Selection, Tree, TreeRow } from './types'
 import './treeboard.css'
-
-const NARROW = 900
-const CHAT_W_KEY = 'commander.tree.chatWidth'
-const clampChat = (w: number) => Math.min(640, Math.max(340, Math.round(w)))
-function loadChatWidth(): number {
-  try {
-    const v = Number(localStorage.getItem(CHAT_W_KEY))
-    if (v) return clampChat(v)
-  } catch {
-    // no storage: the default
-  }
-  return 400
-}
 
 export async function fetchTree(apiUrl: string, token: string): Promise<Tree> {
   const res = await fetch(`${apiUrl}/api/tree`, { headers: { Authorization: `Bearer ${token}` } })
@@ -37,35 +27,65 @@ export async function fetchTree(apiUrl: string, token: string): Promise<Tree> {
   return (await res.json()) as Tree
 }
 
-export function TreeBoard() {
+// The sidebar pane's element, for TreeMain to draw the tree into.
+const useSidePane = create<{ el: HTMLElement | null }>(() => ({ el: null }))
+
+/** TreeSidebar: the app's sidebar, drawn by TreeMain's board. */
+export function TreeSidebar() {
   const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    useSidePane.setState({ el: ref.current })
+    return () => useSidePane.setState({ el: null })
+  }, [])
+  return <div className="tb tb-side" ref={ref} />
+}
+
+// focusFor points the original focus pane at what the tree has open: a step with a
+// NEEDS YOU card opens that card; anything else opens its top-level workstream,
+// on the nested workstream's Workflow when it is one.
+function focusFor(sel: Selection | null, tree: Tree | null) {
+  const st = useStore.getState()
+  const snap = st.snapshot
+  if (!sel || !snap) return st.goHome()
+  const ask = sel.kind === 'step' ? snap.needs_you?.find((n) => n.bead_id === sel.id) : undefined
+  if (ask) return st.select({ kind: 'ask', key: askKey(ask) })
+  const rows = new Map((tree?.rows ?? []).map((r) => [r.id, r]))
+  let row = rows.get(sel.kind === 'step' ? (tree?.steps.find((s) => s.id === sel.id)?.row ?? '') : sel.id)
+  const nested = row
+  while (row?.parent && rows.get(row.parent)) row = rows.get(row.parent)
+  const top = row && snap.workstreams.find((w) => wsKey(w) === row!.key)
+  if (!top) return st.goHome()
+  st.select({ kind: 'ws', key: wsKey(top) })
+  if (nested && nested.id !== top.bead_id) st.openWorkflow(wsKey(top), nested.id, 'workflow')
+}
+
+/** TreeMain: the app's middle pane, and the board that draws both panes. */
+export function TreeMain() {
+  const ref = useRef<HTMLDivElement>(null)
+  const sideEl = useSidePane((s) => s.el)
   const board = useRef<Board | null>(null)
-  const [sel, setSel] = useState<Selection | null>(null)
-  const [chat, setChat] = useState(false)
+  const tree = useRef<Tree | null>(null)
+  const sel = useTreeSelection((s) => s.sel)
   const [error, setError] = useState('')
+  const [ready, setReady] = useState(0)
   const cfg = useStore((s) => s.config)
   const version = useStore((s) => s.snapshot?.version ?? 0)
   const snapshot = useStore((s) => s.snapshot)
-  // The Linear progress card, as the classic sidebar shows it: the whole cycle in the header,
-  // and a top-level workstream's own tickets in its panel.
+  // The Linear progress card, as the classic sidebar showed it, without the cycle list:
+  // the whole cycle in the sidebar header, a top-level workstream's own tickets in its panel.
   const progress = useMemo(() => progressWorkstreams(snapshot?.workstreams ?? [], snapshot?.display ? boardVM(snapshot).workstreams : []), [snapshot])
-  const [linearSlot, setLinearSlot] = useState<HTMLElement | null>(null)
+  const [slots, setSlots] = useState<{ linear: HTMLElement; inspector: HTMLElement } | null>(null)
   const [wsSlot, setWsSlot] = useState<{ el: HTMLElement; row: TreeRow } | null>(null)
-  const openProgress = () => {
-    setBoardMode('classic')
-    useStore.getState().select({ kind: 'progress' })
-  }
+  const openProgress = () => useStore.getState().select({ kind: 'progress' })
 
   useEffect(() => {
-    // The chat below the panel is the Commander's.
-    if (useStore.getState().selected.kind !== 'commander') useStore.getState().goHome()
-    const b = mountBoard(ref.current as HTMLDivElement, {
+    if (!sideEl || !ref.current) return
+    const b = mountBoard(sideEl, ref.current, {
       onSelect: (s) => {
         setTreeSelection(s)
-        setSel(s)
+        focusFor(s, tree.current)
       },
-      onClassic: () => setBoardMode('classic'),
-      onChat: () => setChat((c) => !c),
+      onChat: () => {},
       linearUrl: (id) => {
         const ws = useIntegrations.getState().linearWorkspace
         return ws ? linearUrl(id, ws) : null
@@ -77,13 +97,18 @@ export function TreeBoard() {
       onPanel: (el, row) => setWsSlot(el && row && !row.parent ? { el, row } : null),
     })
     board.current = b
-    setLinearSlot(b.linearSlot)
+    setSlots({ linear: b.linearSlot, inspector: b.inspectorSlot })
+    useTreeSelection.setState({ clear: () => b.clear() })
+    if (tree.current) b.update(tree.current)
+    setReady((n) => n + 1)
     return () => {
       setTreeSelection(null)
+      useTreeSelection.setState({ clear: null })
+      setSlots(null)
       b.destroy()
       board.current = null
     }
-  }, [])
+  }, [sideEl])
 
   useEffect(() => {
     if (!cfg || cfg.demo || !cfg.apiUrl) return
@@ -92,6 +117,7 @@ export function TreeBoard() {
       (t) => {
         if (!live) return
         setError('')
+        tree.current = t
         board.current?.update(t)
       },
       (e) => live && setError(e instanceof Error ? e.message : String(e)),
@@ -99,77 +125,37 @@ export function TreeBoard() {
     return () => {
       live = false
     }
-  }, [cfg, version])
-
-  // Two panes: the board on the left, the Commander chat on the right (resizable).
-  // In a narrow window or side tab the chat is a toggle that opens over the board.
-  const [winW, setWinW] = useState(() => window.innerWidth)
-  useEffect(() => {
-    const onResize = () => setWinW(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  const narrow = winW < NARROW
-  const [chatW, setChatW] = useState(loadChatWidth)
-  const startDrag = (e: ReactPointerEvent) => {
-    e.preventDefault()
-    const x0 = e.clientX,
-      w0 = chatW
-    const move = (m: PointerEvent) => setChatW(clampChat(w0 - (m.clientX - x0)))
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      setChatW((w) => {
-        try {
-          localStorage.setItem(CHAT_W_KEY, String(w))
-        } catch {
-          // the width just won't stick
-        }
-        return w
-      })
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-  const chatShown = !narrow || chat
+  }, [cfg, version, ready])
 
   return (
-    <div className={`tb-root${narrow ? ' narrow' : ''}`} style={{ ['--chat-w' as string]: `${chatW}px` }}>
-      <div className="tb-pane">
-        <div className="tb" ref={ref} />
-      </div>
-      {linearSlot && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, linearSlot)}
+    <div className="tb-main-host">
+      <div className="tb tb-main" ref={ref} />
+      {slots && createPortal(<MyProgress workstreams={progress} onOpen={openProgress} cycles={false} />, slots.linear)}
       {wsSlot && createPortal(<MyProgress workstreams={progress} only={wsSlot.row.key} onOpen={openProgress} cycles={false} />, wsSlot.el)}
+      {slots && sel && createPortal(<InspectorColumn hideOverview />, slots.inspector)}
       {error && (
         <p className="tb-error" role="alert">
           Board unavailable: {error}
         </p>
       )}
-      {!narrow && <div className="tb-split" role="separator" aria-orientation="vertical" aria-label="Resize the chat" onPointerDown={startDrag} />}
-      <aside className="tb-chatcol" hidden={!chatShown} aria-label="Message the Commander">
-        <div className="tb-chathead">
-          {sel ? (
-            <span className="tb-selchip" title="Each message carries what you have open">
-              <span className="tb-selchip-t">
-                {sel.label} {sel.title}
-              </span>
-              <button type="button" aria-label="Clear the selection" onClick={() => board.current?.clear()}>
-                ×
-              </button>
-            </span>
-          ) : (
-            <span className="tb-chatname">Commander</span>
-          )}
-          {narrow && (
-            <button type="button" className="tb-chatclose" onClick={() => setChat(false)}>
-              Close
-            </button>
-          )}
-        </div>
-        <section className="col col-middle" style={{ ['--chat-col' as string]: `${Math.max(280, chatW - 40)}px` }}>
-          <div className="chat-slot">{chatShown && <ChatSlot />}</div>
-        </section>
-      </aside>
+    </div>
+  )
+}
+
+/** SelectionChip: in the chat pane, what the board has open; × clears it. Each message carries it. */
+export function SelectionChip() {
+  const { sel, clear } = useTreeSelection()
+  if (!sel) return null
+  return (
+    <div className="tb-chathead">
+      <span className="tb-selchip" title="Each message to the Commander carries what you have open">
+        <span className="tb-selchip-t">
+          {sel.label} {sel.title}
+        </span>
+        <button type="button" aria-label="Clear the selection" onClick={() => (clear ? clear() : setTreeSelection(null))}>
+          ×
+        </button>
+      </span>
     </div>
   )
 }

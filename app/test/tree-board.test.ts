@@ -19,10 +19,15 @@ afterEach(() => {
 })
 
 function mount(tree: Tree, onSelect: (s: Selection | null) => void = () => {}) {
+  // the app's sidebar and middle pane, side by side
   const root = document.createElement('div')
-  root.className = 'tb'
+  const side = document.createElement('div')
+  const main = document.createElement('div')
+  side.className = 'tb tb-side'
+  main.className = 'tb tb-main'
+  root.append(side, main)
   document.body.appendChild(root)
-  board = mountBoard(root, { onSelect, onClassic: () => {}, onChat: () => {}, linearUrl: () => null, openUrl: () => {} })
+  board = mountBoard(side, main, { onSelect, onChat: () => {}, linearUrl: () => null, openUrl: () => {} })
   board.update(tree)
   return root
 }
@@ -71,8 +76,8 @@ for (const [name, file] of sources) {
         expect(text(card.querySelector('.wt'))).toBe(s.wt ?? '')
         expect(card.classList.contains(`t-${s.type}`)).toBe(true)
         expect(card.classList.contains(`s-${s.state}`)).toBe(true)
-        // the column cmdrd placed it in: grid column 2 is Now
-        expect((card.parentElement as HTMLElement).style.gridColumn).toBe(String(2 + s.col))
+        // the column cmdrd placed it in: the board pane's grid column 1 is Now
+        expect((card.parentElement as HTMLElement).style.gridColumn).toBe(String(1 + s.col))
       }
     })
 

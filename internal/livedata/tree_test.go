@@ -283,3 +283,23 @@ func TestTreeShowsTheRunsModel(t *testing.T) {
 		t.Fatalf("the Commander's read lacks the model:\n%s", text)
 	}
 }
+
+// The first workstream shown is 1: open ones are numbered first, done ones after.
+func TestTreeNumbersOpenWorkstreamsFirst(t *testing.T) {
+	snap := treeSnapshot()
+	done := snap.Workstreams[2]
+	snap.Workstreams = append([]SnapWorkstream{done}, snap.Workstreams[:2]...)
+	tr := BuildTree(snap, snap.GeneratedAt.Unix())
+	var got []string
+	for _, r := range tr.Rows {
+		if r.Parent == "" {
+			got = append(got, r.Label+" "+r.ID)
+		}
+	}
+	if strings.Join(got, ", ") != "1 w1, 2 w2, 3 w3" {
+		t.Fatalf("top-level numbers: %v", got)
+	}
+	if text := tr.Text(snap.GeneratedAt.Unix()); !strings.Contains(text, "\n1 Notify: every notification goes through Notify · w1") {
+		t.Fatalf("the Commander's read numbers differently:\n%s", text)
+	}
+}

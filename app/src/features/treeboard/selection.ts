@@ -3,22 +3,24 @@
 // the workstream statuses, so "this is wrong" resolves to that workstream or
 // step. The transcript strips it (features/chat/screen.ts), like the statuses.
 
+import { create } from 'zustand'
 import type { Selection } from './types'
 
-let current: Selection | null = null
+/** useTreeSelection: what the board has open, and how to close it (the chip's ×). */
+export const useTreeSelection = create<{ sel: Selection | null; clear: (() => void) | null }>(() => ({ sel: null, clear: null }))
 
 export function setTreeSelection(sel: Selection | null): void {
-  current = sel
+  useTreeSelection.setState({ sel })
 }
 
 export function treeSelection(): Selection | null {
-  return current
+  return useTreeSelection.getState().sel
 }
 
 const attr = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string)
 
 /** selectionBlock is the <selection> block for the current selection ('' when nothing is open). */
-export function selectionBlock(sel: Selection | null = current): string {
+export function selectionBlock(sel: Selection | null = treeSelection()): string {
   if (!sel) return ''
   const what =
     sel.kind === 'step'

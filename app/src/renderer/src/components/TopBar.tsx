@@ -7,7 +7,6 @@ import { useStore } from '../store'
 import { useChatTarget } from './ChatSlot'
 import { modelName } from '../../../features/chat/modelName'
 import { isPage } from '../viewmodel'
-import { setBoardMode } from '../../../features/treeboard/mode'
 
 export function TopBar({ left, chat }: { left: number; chat: number }) {
   const page = useStore((s) => (isPage(s.selected) ? s.selected.kind : null))
@@ -26,9 +25,6 @@ export function TopBar({ left, chat }: { left: number; chat: number }) {
     <header className="app-top" style={{ gridTemplateColumns: split ? `${left}px minmax(0, 1fr) ${chat}px` : `${left}px minmax(0, 1fr)` }}>
       <div className="app-top-left">
         <HistoryArrows />
-        <button type="button" className="board-switch" title="Switch to the tree board" onClick={() => setBoardMode('tree')}>
-          Tree board
-        </button>
       </div>
       {page && (
         <div className="app-top-pane">
