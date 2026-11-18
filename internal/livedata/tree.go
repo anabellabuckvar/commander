@@ -72,7 +72,7 @@ type TreeStep struct {
 	ID    string `json:"id"`
 	Row   string `json:"row"`
 	Title string `json:"title"`
-	Type  string `json:"type"`  // you | agent | review | person
+	Type  string `json:"type"`  // you | agent | review | person | automatic
 	Owner string `json:"owner"` // You, Implementer agent, Review agent, or the person or team
 	State string `json:"state"` // active | notstarted | done
 	// Col is its column: 0 Now, 1 Next, n "n steps out"; done steps are -1.
@@ -352,6 +352,9 @@ func (b *treeBuild) step(s SnapStep, row string) *TreeStep {
 	}
 	st := &TreeStep{ID: s.BeadID, Row: row, Title: title, Text: text, Since: since, Gate: d.Gate || s.Gate, Criteria: s.Criteria}
 	switch {
+	case s.Automatic:
+		// Automatic: no person or agent; it waits for one event and closes itself.
+		st.Type, st.Owner = "automatic", "Automatic"
 	case actor == "you":
 		st.Type, st.Owner = "you", "You"
 	case actor == "reviewers":
@@ -478,7 +481,7 @@ func (b *treeBuild) finish(order []string, now int64) {
 	// An unblocked agent step never sits unstarted (rule 21): the watcher starts an agent on it.
 	for _, id := range sortedKeys(b.steps) {
 		s := b.steps[id]
-		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
+		if s.State == "notstarted" && (s.Type == "agent" || s.Type == "review" || s.Type == "automatic") && !b.paused[s.Row] && !pausedText(s.Text) && len(openBlockers(id)) == 0 {
 			s.State = "active"
 		}
 	}
@@ -720,6 +723,30 @@ func (b *treeBuild) ends(set []string, last bool) []string {
 
 // cardLines sets the card's owner line and second line.
 func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
+	if s.Type == "automatic" {
+		s.Own, s.Run, s.Model, s.ModelID, s.Asleep = "Automatic", "", "", "", false
+		if s.State == "done" {
+			s.Own = "✓ Automatic"
+		}
+		s.Wait = ""
+		switch {
+		case s.State == "active":
+			s.Wait = waitingFor(s.Text, s.Title)
+		case s.State == "notstarted":
+			var other []string
+			for _, x := range openBlockers {
+				if o := b.steps[x]; o.Row != s.Row {
+					if l := b.rows[o.Row].Label; !slices.Contains(other, l) {
+						other = append(other, l)
+					}
+				}
+			}
+			if len(other) > 0 {
+				s.Wait = "After " + strings.Join(other, ", ")
+			}
+		}
+		return
+	}
 	agentish := s.Type == "agent" || s.Type == "review"
 	rt := ""
 	if s.State == "active" && agentish {
@@ -781,7 +808,18 @@ func (b *treeBuild) cardLines(s *TreeStep, openBlockers []string) {
 	}
 }
 
-var ownerOrder = []string{"you", "review", "agent", "person"}
+var ownerOrder = []string{"you", "review", "agent", "person", "automatic"}
+
+// waitingFor is an Automatic step's line: what it waits for, in plain words.
+func waitingFor(text, title string) string {
+	if treeWaitText.MatchString(text) {
+		return treeWaitText.ReplaceAllString(text, "Waiting for ")
+	}
+	if strings.HasPrefix(title, "Waiting for") {
+		return title
+	}
+	return "Waiting for " + lowerFirst(title)
+}
 
 // status is what holds the row now, one chip per owner of an active step under it.
 func (b *treeBuild) status(id string) []TreeLine {
@@ -817,6 +855,8 @@ func (b *treeBuild) status(id string) []TreeLine {
 				out = append(out, TreeLine{"review", "In review"})
 			case "agent":
 				out = append(out, TreeLine{"agent", "Implementer working"})
+			case "automatic":
+				out = append(out, TreeLine{"automatic", waitingFor(s.Text, s.Title)})
 			default:
 				out = append(out, TreeLine{"person", "Waiting on " + s.Owner})
 			}
@@ -883,7 +923,7 @@ func (b *treeBuild) line(id string) TreeLine {
 			act = append(act, st)
 		}
 	}
-	pri := map[string]int{"you": 0, "review": 1, "agent": 2, "person": 3}
+	pri := map[string]int{"you": 0, "review": 1, "agent": 2, "person": 3, "automatic": 4}
 	sort.SliceStable(act, func(i, j int) bool { return pri[act[i].Type] < pri[act[j].Type] })
 	if len(act) > 0 {
 		return stepLine(act[0])
@@ -903,6 +943,9 @@ func stepLine(s *TreeStep) TreeLine {
 			t += " (" + treeWaitText.ReplaceAllString(s.Text, "waiting for ") + ")"
 		}
 		return TreeLine{"agent", "Implementer agent: " + t}
+	}
+	if s.Type == "automatic" {
+		return TreeLine{"automatic", waitingFor(s.Text, s.Title)}
 	}
 	return TreeLine{"person", "Waiting on " + s.Owner + ": " + t}
 }

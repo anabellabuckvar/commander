@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // TreeEdit is one edit of the workstream tree in the board's own words. A
@@ -33,6 +34,9 @@ type TreeEdit struct {
 	After string `json:"after,omitempty"`
 	// Reason: supersede and close.
 	Reason string `json:"reason,omitempty"`
+	// For: create with owner automatic: the one event it waits for, in the --waiting
+	// grammar (deploy:<sha>, pr:merged:#N, ci:#N, main-ci:<sha>, until:<time>:<what>, event:slack:...).
+	For string `json:"for,omitempty"`
 }
 
 // ownerLabels are the labels that make owner a step's one owner.
@@ -50,18 +54,21 @@ func ownerLabels(owner string) (string, error) {
 			return "", fmt.Errorf("owner %q: a name cannot hold a comma", owner)
 		}
 		return "lane:elsewhere:" + who, nil
+	case o == "automatic":
+		return AutomaticLabel, nil
 	case o == "commander" || o == "manager":
 		return "", errors.New("rule 10: nothing is owned by the Commander; owner is you, implementer, reviewer or person:<name>")
 	}
-	return "", fmt.Errorf("owner %q: use you, implementer, reviewer or person:<name> (rules 7-9)", owner)
+	return "", fmt.Errorf("owner %q: use you, implementer, reviewer, person:<name> or automatic (rules 7-9)", owner)
 }
 
 // ownerTags are every owner label set_owner replaces.
-var ownerTags = []string{"lane:you", "lane:agents", "lane:commander", "lane:elsewhere", "review", "gate", "approver:user", "needs-user"}
+var ownerTags = []string{"lane:you", "lane:agents", "lane:commander", "lane:elsewhere", "lane:automatic", "review", "gate", "approver:user", "needs-user"}
 
 // CompileTreeEdits turns edits into the plan's write operations, in order.
 func CompileTreeEdits(edits []TreeEdit) ([][]string, error) {
 	var ops [][]string
+	now := time.Now()
 	for i, e := range edits {
 		bad := func(format string, a ...any) error {
 			return fmt.Errorf("edit %d (%s): %s", i+1, e.Op, fmt.Sprintf(format, a...))
@@ -76,6 +83,11 @@ func CompileTreeEdits(edits []TreeEdit) ([][]string, error) {
 		}
 		switch e.Op {
 		case "create":
+			if e.Owner == "automatic" && strings.TrimSpace(e.Title) == "" {
+				if w, err := ParseWait(strings.TrimSpace(e.For)); err == nil {
+					e.Title = "Waiting for " + w.Text()
+				}
+			}
 			if err := need(map[string]string{"title": e.Title}); err != nil {
 				return nil, err
 			}
@@ -99,6 +111,23 @@ func CompileTreeEdits(edits []TreeEdit) ([][]string, error) {
 					op = append(op, "--description", e.Brief)
 				}
 			case "", "step":
+				if e.Owner == "automatic" {
+					// An Automatic step: no person or agent; it waits for one event and closes itself.
+					w, err := ParseWait(strings.TrimSpace(e.For))
+					if err != nil || !WatchableWait(w) {
+						return nil, bad("rule 14: an Automatic step waits for one event the system sees, in \"for\": deploy:<sha>, pr:<merged|green|approved>:#N, ci:#N, main-ci:<sha>, until:<RFC3339>:<what> or event:slack:<channel>:<regexp>")
+					}
+					w.Since = now
+					if e.Ref == "" {
+						e.Ref = fmt.Sprintf("auto%d", i+1)
+					}
+					// The wait label can hold commas, so it is added after the create, by ref.
+					ops = append(ops, append(op, "--labels", "kind:objective,"+AutomaticLabel, "--ref", e.Ref, "--silent"), []string{"update", "$" + e.Ref, "--add-label", w.Label()})
+					continue
+				}
+				if e.For != "" {
+					return nil, bad("only an Automatic step waits (rule 14): owner automatic with for")
+				}
 				if e.Owner == "" {
 					return nil, bad("rule 7: a step has exactly one owner: you, implementer, reviewer or person:<name>")
 				}

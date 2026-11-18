@@ -564,6 +564,9 @@ func (n *ShapeNode) reviewStep() bool {
 // agentWork: a step an agent does whose result someone must be able to trust:
 // not a gate, not a review, not the user's or someone outside's.
 func (n *ShapeNode) agentWork() bool {
+	if n.automaticStep() {
+		return false
+	}
 	lane := n.prefixed("lane:")
 	return !n.gate() && !n.reviewStep() && !n.closing() && (lane == "" || lane == "agents") && n.prefixed("approver:") == ""
 }

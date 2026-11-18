@@ -284,6 +284,15 @@ func hasLabelPrefix(labels []string, prefix string) bool {
 // the wait still stands: a wait already replaced or cleared mails nothing, and
 // a failed read leaves the decision to the next poll.
 func (w *waitWatcher) wake(ctx context.Context, p store.Project, b beads.Bead, wt beads.Wait, subject, body string) {
+	// An Automatic step's event happened: it closes itself, and the step after it starts.
+	if slices.Contains(b.Labels, beads.AutomaticLabel) {
+		if err := w.beads.CloseWithReason(ctx, p.Path, b.ID, "Automatic: "+subject); err != nil {
+			log.Printf("daemon: waits: close automatic step %s: %v", b.ID, err)
+			return
+		}
+		log.Printf("daemon: waits: automatic step %s closed: %s", b.ID, subject)
+		return
+	}
 	label := storedLabel(b.Labels, wt)
 	key := b.ID + "|" + label
 	digest := sha256.Sum256([]byte(label))

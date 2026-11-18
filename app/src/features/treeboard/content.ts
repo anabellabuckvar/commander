@@ -14,12 +14,13 @@ export const RULES_HTML = `
     <div><h2>Two kinds of bead</h2>
     <table><tr><th>Kind</th><th>Children</th><th>Owner</th></tr>
     <tr><td><b>Workstream</b></td><td>Only Workstreams or only Standards</td><td>None. Its state comes from its children.</td></tr>
-    <tr><td><b>Standard</b></td><td>None</td><td>Exactly one: a Person (You, or a named person or team) or an Agent (Implementer or Reviewer)</td></tr></table></div>
+    <tr><td><b>Standard</b></td><td>None</td><td>Exactly one: a Person (You, or a named person or team), an Agent (Implementer or Reviewer), or Automatic (waits for one event and closes itself)</td></tr></table></div>
     <div><h2>Owners and colours</h2>
     <table><tr><td><span class="sw red"></span></td><td>You</td><td>A decision, approval or action only you can take. Always a card on your list.</td></tr>
     <tr><td><span class="sw green"></span></td><td>Implementer agent</td><td>Owns the goal end to end, including waiting for CI or a deploy.</td></tr>
     <tr><td><span class="sw purple"></span></td><td>Review agent</td><td>Checks other steps' results. Never the agent that did the work. Can look across workstreams.</td></tr>
-    <tr><td><span class="sw yellow"></span></td><td>Named person or team</td><td>Someone outside the system, e.g. Matt or IT.</td></tr></table>
+    <tr><td><span class="sw yellow"></span></td><td>Named person or team</td><td>Someone outside the system, e.g. Matt or IT.</td></tr>
+    <tr><td><span class=\"sw slate\"></span></td><td>Automatic</td><td>No person or agent: it waits for one event the system sees (a deploy, a PR, CI, a Slack message, a time) and closes itself when it happens. The step after it then starts.</td></tr></table>
     <p>Upcoming: the owner's colour, no border, flat. Active: lifted, with a shadow. Done: grey. Steps side by side in one column run in parallel. When an agent is running on a step right now, the owner line names its model, e.g. "Implementer agent · Opus 5.5" or "Review agent · GPT-5 Codex", and the dot pulses. A step that is asleep until its event has no agent on it: it sits flat with a dashed edge, a still dot, and says what it is asleep until. Your own cards always pulse.</p></div>
     <div><h2>Structure</h2><ol>
       <li>Every bead is a Workstream or a Standard.</li>
@@ -29,7 +30,7 @@ export const RULES_HTML = `
       <li>"Blocked by" never forms a cycle.</li></ol></div>
     <div><h2>Owners</h2><ol start="6">
       <li>A Workstream has no owner.</li>
-      <li>A Standard has exactly one owner: a Person or an Agent.</li>
+      <li>A Standard has exactly one owner: a Person, an Agent, or Automatic.</li>
       <li>A Person owner is You or a named person or team.</li>
       <li>An Agent owner is an Implementer or a Reviewer.</li>
       <li>Nothing is owned by the Commander.</li>
@@ -37,9 +38,9 @@ export const RULES_HTML = `
       <li>A Reviewer's agent is never the agent that did the work it checks.</li>
       <li>A You Standard that comes straight after an Implementer's work has a Reviewer between them.</li></ol></div>
     <div><h2>Waits and events</h2><ol start="14">
-      <li>Only an Agent-owned Standard can wait for an event.</li>
+      <li>Only an Automatic Standard waits, for exactly one event, and closes itself when it happens. A Standard that needs an event first comes after an Automatic step.</li>
       <li>The event is one the system can see: a CI result, a deploy of a commit, a PR merged, green or approved, a Slack message, or a date.</li>
-      <li>Nothing polls. The event wakes the agent.</li></ol></div>
+      <li>Nothing polls. The event closes the Automatic step, and the step after it starts.</li></ol></div>
     <div><h2>Titles and text</h2><ol start="17">
       <li>A Standard's title is its goal, stated as an outcome.</li>
       <li>A You Standard's title is the decision or approval itself, never "Confirm done".</li>

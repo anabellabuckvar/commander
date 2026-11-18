@@ -33,7 +33,7 @@ export interface TreeStep {
   id: string
   row: string
   title: string
-  type: 'you' | 'agent' | 'review' | 'person'
+  type: 'you' | 'agent' | 'review' | 'person' | 'automatic'
   owner: string
   state: 'active' | 'notstarted' | 'done'
   col: number

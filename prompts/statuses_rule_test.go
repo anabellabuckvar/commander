@@ -45,7 +45,9 @@ func TestCommanderPromptEditsTheTreeThroughOneEndpoint(t *testing.T) {
 	for _, needle := range []string{
 		"the one tree-edit endpoint, `cmdr plan apply` with tree edits",
 		"`cmdr plan apply --file plan.json` (or `-` for stdin) is the one way you change the tree",
-		`{"op": "set_owner", "id": "<bead id>", "owner": "you|implementer|reviewer|person:<name or team>"}`,
+		`{"op": "set_owner", "id": "<bead id>", "owner": "you|implementer|reviewer|person:<name or team>|automatic"}`,
+		`{"op": "create", "parent": "$p2", "owner": "automatic", "for": "deploy:<short sha>", "ref": "deployed"}`,
+		"Only an Automatic step waits (rule 14)",
 		"`[rule N] <why> — fix: <fix>`",
 		`<selection kind="workstream|step" id="<bead id>"`,
 		"\"this is wrong\" is about the selected bead",

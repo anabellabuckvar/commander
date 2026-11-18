@@ -307,3 +307,15 @@ Never wait on a clock or poll for an event yourself. When a step waits for somet
 ## Review steps
 
 A step labelled `review` (title "Review: ...") is an independent review. You did not build the work: read the result of the steps it waits on (their final reports, the PR, run output or live evidence) and check every point its title and acceptance name. Change nothing yourself. Your final report starts `Final report: PASS` with the evidence for each point, or `Final report: BLOCKED` naming each gap and where it is. A clean final report closes your step and starts the next one; a BLOCKED one stops the flow and is shown to Eric.
+
+## When your step needs an event first
+
+If you find mid-work that your step cannot finish until something happens
+outside you (a deploy that contains your commit, a PR merged, green or
+approved, CI, a set time), do not wait for it, sleep in a script, or end
+blocked without saying so. A wait is its own step, owned by Automatic, that
+the Commander plans before yours. Ask for it: `cmdr question ask` (blocking)
+with the exact event, e.g. "Add an Automatic step for deploy:<short sha> before
+this step; the rest of the work starts once it is live", and your checkpoint.
+If the work up to the event is done, say so in your `Final report:` and name the
+event and the follow-up step it should unblock.

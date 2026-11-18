@@ -137,6 +137,7 @@ type ObjectiveRow struct {
 	// bead under another, in a project whose nested Managers are on); see beads.Owner.
 	Owns        bool
 	Track       bool         // a nested workstream: a separate outcome with its own gate chain, under another workstream
+	Automatic   bool         // owned by Automatic (lane:automatic): it waits for one event and closes itself
 	Rank        int          // its priority among its siblings (1 = first); 0 follows in the order added
 	Superseded  bool         // dropped from the plan (label superseded/retired, or closed as superseded): never an approval
 	Proposed    string       // a Manager's proposal Commander has not reviewed (beads.Proposed*): never NEEDS YOU
@@ -912,6 +913,7 @@ func projectObjectiveRows(ctx context.Context, bc beads.Client, project store.Pr
 			Task:          (slices.Contains(objective.Labels, "kind:task") || slices.Contains(objective.Labels, "kind:operational")) && !slices.Contains(objective.Labels, "kind:objective") && !slices.Contains(objective.Labels, beads.GateLabel) && !beads.IsWorkstream(objective.Labels),
 			KindTask:      slices.Contains(objective.Labels, "kind:task"),
 			Track:         beads.IsNested(objective.Labels, parent),
+			Automatic:     slices.Contains(objective.Labels, beads.AutomaticLabel),
 			Owns:          parent != "" && beads.OwnsWork(objective),
 			Superseded:    supersededBead(objective),
 			Proposed:      proposal.Kind,

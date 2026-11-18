@@ -116,3 +116,15 @@ describe('one grid', () => {
     }
   })
 })
+
+describe('time on a step', () => {
+  it('reads now for the first minute, then minutes, hours and days', async () => {
+    const { ago } = await import('../src/features/treeboard/board')
+    const t = 1_800_000_000_000
+    expect(ago(t, t + 5_000)).toBe('now')
+    expect(ago(t, t + 59_000)).toBe('now')
+    expect(ago(t, t + 60_000)).toBe('1m')
+    expect(ago(t, t + 2 * 3_600_000)).toBe('2h')
+    expect(ago(t, t + 3 * 86_400_000)).toBe('3d')
+  })
+})

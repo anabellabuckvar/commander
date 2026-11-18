@@ -51,6 +51,37 @@ var ContentGrader func(ctx context.Context, changed []ShapeNode, tree []ShapeNod
 
 func (n *ShapeNode) workstreamBead() bool { return n.has("kind:workstream") || n.has("kind:track") }
 
+// AutomaticLabel is the owner tag of an Automatic step: a Standard with no person
+// or agent on it that waits for one event the system sees and closes itself
+// when that event happens.
+const AutomaticLabel = "lane:automatic"
+
+func (n *ShapeNode) automaticStep() bool { return n.has(AutomaticLabel) }
+
+// WatchableWait: an event cmdrd sees and resolves itself, the one an Automatic step waits for, the one an Automatic step waits for (a deploy, a PR, CI,
+// a prod tag, a Slack message, a time). The system's own custody timers are not
+// events an Automatic step waits for.
+func WatchableWait(w Wait) bool {
+	switch w.Kind {
+	case WaitDeploy, WaitPR, WaitCI, WaitMainCI, WaitProdTag, WaitEvent:
+		return true
+	case WaitUntil:
+		return !IsManagerHandoff(w) && !IsManagerDispatch(w) && w.Ref != ManagerPlanWait && w.Ref != ManagerStartWait
+	}
+	return false
+}
+
+// watchableWaits are the event waits a bead carries.
+func (n *ShapeNode) watchableWaits() []Wait {
+	var out []Wait
+	for _, l := range n.Labels {
+		if w, ok := ParseWaitLabel(l); ok && WatchableWait(w) {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 // internal beads (an agent's task, a gate's record) are not steps in the model.
 func (n *ShapeNode) internal() bool {
 	return n.has("kind:task") || n.has("kind:gate") || n.has("kind:operational")
@@ -119,8 +150,25 @@ func TreeRules(nodes []ShapeNode) []ShapeViolation {
 					fmt.Sprintf("remove the owner labels from %s and give the work to a step under it", id)))
 			}
 			if n.waiting() {
-				out = append(out, rule(14, []string{id}, fmt.Sprintf("workstream %q waits for an event; only an agent's step can", n.Title),
-					fmt.Sprintf("put the wait on the step under %s whose agent it wakes", id)))
+				out = append(out, rule(14, []string{id}, fmt.Sprintf("workstream %q waits for an event; only an Automatic step waits", n.Title),
+					fmt.Sprintf("put the wait on its own Automatic step under %s, before the steps that need it", id)))
+			}
+			continue
+		}
+		if n.automaticStep() {
+			if len(wsKids)+len(stepKids) > 0 {
+				out = append(out, rule(4, []string{id}, fmt.Sprintf("Automatic step %q has children", n.Title), fmt.Sprintf("move the children of %s out", id)))
+			}
+			if n.closed() {
+				continue
+			}
+			if ws := n.watchableWaits(); len(ws) != 1 || len(ws) != countWaits(n) {
+				out = append(out, rule(14, []string{id}, fmt.Sprintf("Automatic step %q waits for %d events; an Automatic step waits for exactly one the system sees (a deploy, a PR, CI, a Slack message or a time)", n.Title, len(ws)),
+					fmt.Sprintf("give %s exactly one wait: deploy:<sha>, pr:<merged|green|approved>:#N, ci:#N, main-ci:<sha>, until:<time> or event:slack:...", id)))
+			}
+			if o := n.laneOwners(); len(o) > 1 || n.has("needs-user") || n.gate() || n.Assigned != "" {
+				out = append(out, rule(7, []string{id}, fmt.Sprintf("Automatic step %q also has a person or agent owner; an Automatic step has no person or agent on it", n.Title),
+					fmt.Sprintf("leave %s owned by Automatic only (lane:automatic)", id)))
 			}
 			continue
 		}
@@ -131,6 +179,10 @@ func TreeRules(nodes []ShapeNode) []ShapeViolation {
 		if n.closed() {
 			continue
 		}
+		if ws := n.watchableWaits(); len(ws) > 0 {
+			out = append(out, rule(14, []string{id}, fmt.Sprintf("step %q waits for %s; only an Automatic step waits", n.Title, ws[0].Text()),
+				fmt.Sprintf("put the wait on its own Automatic step before %s (create owner automatic with for, then link %s after it) and clear it from %s", id, id, id)))
+		}
 		owners := n.laneOwners()
 		if len(owners) > 1 {
 			out = append(out, rule(7, []string{id}, fmt.Sprintf("step %q has %d owners (%s)", n.Title, len(owners), strings.Join(owners, ", ")),
@@ -140,17 +192,23 @@ func TreeRules(nodes []ShapeNode) []ShapeViolation {
 			out = append(out, rule(8, []string{id}, fmt.Sprintf("step %q is owned by someone outside who is not named", n.Title),
 				fmt.Sprintf("name the person or team: owner person:<name> on %s", id)))
 		}
-		lane := n.prefixed("lane:")
-		if n.waiting() && (lane == "you" || strings.HasPrefix(lane, "elsewhere") || n.has("needs-user") || (n.gate() && n.prefixed("approver:") == "user")) {
-			out = append(out, rule(14, []string{id}, fmt.Sprintf("step %q is a person's but waits for an event; only an agent's step can", n.Title),
-				fmt.Sprintf("give the wait to an agent step before %s, or drop it", id)))
-		}
 		if normTitle(n.Title) == "confirm done" {
 			out = append(out, rule(18, []string{id}, fmt.Sprintf("step %s is titled \"Confirm done\"; a workstream is done when its children are", id),
 				fmt.Sprintf("drop %s, or title it with the decision or approval itself", id)))
 		}
 	}
 	return out
+}
+
+// countWaits counts every wait label a bead carries.
+func countWaits(n *ShapeNode) int {
+	c := 0
+	for _, l := range n.Labels {
+		if _, ok := ParseWaitLabel(l); ok {
+			c++
+		}
+	}
+	return c
 }
 
 // TreeTransitions checks the numbered lifecycle rules a write breaks by what

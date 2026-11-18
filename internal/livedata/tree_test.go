@@ -340,3 +340,30 @@ func TestTreeDoneAndProgressAgree(t *testing.T) {
 		t.Errorf("mixed row: done=%v %d%% %q", r.Done, r.Progress, r.Of)
 	}
 }
+
+// An Automatic step is a card of its own: no person or agent, "Waiting for" its
+// event; the step after it is Next.
+func TestTreeAutomaticStep(t *testing.T) {
+	snap := Snapshot{Workstreams: []SnapWorkstream{{N: 1, Project: "app", BeadID: "a", Title: "Alerts", Status: "open", Steps: []SnapStep{
+		{BeadID: "a.1", Title: "Waiting for prod deploy with 53c4be7", Status: "open", Automatic: true},
+		{BeadID: "a.2", Title: "Check a real alert reaches the channel", Status: "open", Lane: "agents", BlockedBy: []string{"a.1"}},
+	}}},
+		Display: &Display{Workstreams: []BoardRow{{Key: "app:a", N: 1, Diagram: &Diagram{ID: "a", Steps: []DiagramStep{
+			{ID: "a.1", Title: "Waiting for prod deploy with 53c4be7", Actor: "automatic", Kind: "waiting", Text: "Waiting on prod deploy with 53c4be7", Since: 1_800_000_000},
+			{ID: "a.2", Title: "Check a real alert reaches the channel", Actor: "operators", Kind: "idle", Text: "Not started", After: []string{"a.1"}},
+		}}}}}}
+	tr := BuildTree(snap, 1_800_000_600)
+	steps := map[string]TreeStep{}
+	for _, s := range tr.Steps {
+		steps[s.ID] = s
+	}
+	if s := steps["a.1"]; s.Type != "automatic" || s.Own != "Automatic" || s.State != "active" || s.Col != 0 || s.Wait != "Waiting for prod deploy with 53c4be7" || s.Run != "" {
+		t.Fatalf("automatic card: %+v", s)
+	}
+	if s := steps["a.2"]; s.State != "notstarted" || s.Col != 1 {
+		t.Fatalf("the step after it: %+v", s)
+	}
+	if r := tr.Rows[0]; r.Status[0] != (TreeLine{"automatic", "Waiting for prod deploy with 53c4be7"}) {
+		t.Fatalf("row status: %+v", r.Status)
+	}
+}

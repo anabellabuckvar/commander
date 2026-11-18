@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func numbersOf(vs []ShapeViolation) map[int]int {
@@ -32,8 +33,8 @@ func TestTreeRulesStructureAndOwners(t *testing.T) {
 		// rule 7: two owners; rule 8: an unnamed outsider
 		step("W.1.3", "W.1", "Two owners", "lane:agents", "lane:you"),
 		step("W.1.4", "W.1", "Someone", "lane:elsewhere"),
-		// rule 14: your step waiting on an event
-		step("W.1.5", "W.1", "Your wait", "lane:you", "waiting:deploy:abc"),
+		// rule 14: a step that waits (only an Automatic step waits)
+		step("W.1.5", "W.1", "Your wait", "lane:you", deployLabel()),
 		// rule 18: Confirm done as a step (closing gates are not counted as children)
 		step("W.1.6", "W.1", "Confirm done", "gate", "approver:user"),
 		// internal and superseded beads are not steps
@@ -225,4 +226,62 @@ func TestPostgresEveryWriteRefusesOnlyNewBreaks(t *testing.T) {
 	if resp := postgresApplyOps(ctx, dir, [][]string{{"update", loose, "--add-label", "lane:you"}}); resp.Exit == 0 || !strings.Contains(resp.Error, "[rule 7]") {
 		t.Fatalf("a new break on an already broken bead was not refused: %+v", resp)
 	}
+}
+
+func TestAutomaticSteps(t *testing.T) {
+	deploy, _ := ParseWait("deploy:53c4be7949")
+	deploy.Since = time.Unix(1_800_000_000, 0)
+	pr, _ := ParseWait("pr:merged:#12")
+	pr.Since = deploy.Since
+	event := func(id string, labels ...string) ShapeNode {
+		return ShapeNode{ID: id, Parent: "W.1", Title: "Waiting for a deploy", Status: "open", Labels: append([]string{"kind:objective", AutomaticLabel}, labels...)}
+	}
+	nodes := []ShapeNode{
+		ws("W"), track("W.1", "W", "Phase 1"),
+		event("W.1.1", deploy.Label()),                                       // good
+		event("W.1.2"),                                                       // names no event
+		event("W.1.3", deploy.Label(), pr.Label()),                           // names two
+		event("W.1.4", deploy.Label(), "lane:agents"),                        // has an owner
+		step("W.1.5", "W.1", "Check it live", "lane:agents", deploy.Label()), // a step that waits
+	}
+	nodes[6].Blockers = []string{"W.1.1"}
+	got := map[string][]int{}
+	for _, v := range TreeRules(nodes) {
+		got[v.Beads[0]] = append(got[v.Beads[0]], v.Number)
+	}
+	if len(got["W.1.1"]) != 0 || got["W.1.2"][0] != 14 || got["W.1.3"][0] != 14 || got["W.1.4"][0] != 7 || got["W.1.5"][0] != 14 {
+		t.Fatalf("event rules: %v", got)
+	}
+	// An Automatic step is not agent work: it needs no owner tag, brief or review.
+	shape := ShapeCheck([]ShapeNode{ws("W"), track("W.1", "W", "Phase 1"), event("W.1.1", deploy.Label()), step("W.1.2", "W.1", "Merge it", "gate", "approver:user")})
+	for _, v := range shape {
+		if v.Beads[0] == "W.1.1" {
+			t.Fatalf("shape check on an Automatic step: %+v", v)
+		}
+	}
+	ops, e := CompileTreeEdits([]TreeEdit{{Op: "create", Parent: "W.1", Owner: "automatic", For: "deploy:53c4be7949", Ref: "deployed"}, {Op: "link", ID: "W.1.5", After: "$deployed"}})
+	if e != nil || len(ops) != 3 || ops[0][1] != "Waiting for "+deploy.Text() || !strings.Contains(strings.Join(ops[0], " "), AutomaticLabel) || ops[1][0] != "update" || !strings.HasPrefix(ops[1][3], WaitLabelPrefix) {
+		t.Fatalf("event edit: %v %v", ops, e)
+	}
+	for _, bad := range []TreeEdit{{Op: "create", Parent: "W.1", Owner: "automatic"}, {Op: "create", Parent: "W.1", Owner: "automatic", For: "user"}, {Op: "create", Parent: "W.1", Title: "Build", Owner: "implementer", For: "ci:#3"}} {
+		if _, e := CompileTreeEdits([]TreeEdit{bad}); e == nil {
+			t.Errorf("accepted %+v", bad)
+		}
+	}
+	// Migration: the step's wait moves onto an Automatic step before it.
+	mig := AutomaticStepOps(Bead{ID: "W.1.5", Parent: "W.1", Labels: []string{"lane:agents", deploy.Label()}})
+	text := make([]string, len(mig))
+	for i, op := range mig {
+		text[i] = strings.Join(op, " ")
+	}
+	want := []string{"create Waiting for " + deploy.Text() + " --labels kind:objective,lane:automatic --ref autoW_1_5_1 --silent --parent W.1", "update $autoW_1_5_1 --add-label " + deploy.Label(), "dep add W.1.5 $autoW_1_5_1", "update W.1.5 --remove-label " + deploy.Label()}
+	if strings.Join(text, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("migration ops:\n%s", strings.Join(text, "\n"))
+	}
+}
+
+func deployLabel() string {
+	w, _ := ParseWait("deploy:abc1234")
+	w.Since = time.Unix(1_800_000_000, 0)
+	return w.Label()
 }

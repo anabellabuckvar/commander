@@ -31,11 +31,15 @@ export interface Board {
 }
 
 type Node = TreeStep
-const OWNER: Record<string, string> = { you: 'You', agent: 'Implementer agent', review: 'Review agent', person: 'Another person' }
+const OWNER: Record<string, string> = { you: 'You', agent: 'Implementer agent', review: 'Review agent', person: 'Another person', automatic: 'Automatic' }
+// Automatic steps carry a clock instead of an owner's dot.
+const CLOCK = '<svg class="clock" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 3.2V6l1.9 1.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string)
 const cssEscape = (s: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, '\\$&'))
-const ago = (t: number) => {
-  const m = Math.max(1, Math.floor((Date.now() - t) / 60000))
+// Time on a step: "now" for its first minute, then 1m, 2m … h, d.
+export const ago = (t: number, now = Date.now()) => {
+  const m = Math.floor((now - t) / 60000)
+  if (m < 1) return 'now'
   return m < 60 ? m + 'm' : m < 1440 ? Math.floor(m / 60) + 'h' : Math.floor(m / 1440) + 'd'
 }
 const LINEAR_SVG =
@@ -200,7 +204,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
           el.classList.remove('swap')
         }, 700)
       }),
-    60000,
+    30000, // every 30 s, so "now" turns to 1m on time
   )
 
   // ---------- search + filters ----------
@@ -242,7 +246,7 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
     const live = n.state === 'active' && (n.type === 'agent' || n.type === 'review') && !!n.run
     el.className = `card t-${n.type} s-${n.state}` + (filtersOn() && cardDim(n) ? ' fdim' : '') + (cardHit(n) ? ' hit' : '') + (live ? ' run' : n.asleep ? ' asleep' : '')
     el.innerHTML =
-      `<span class="own"><i></i>${esc(n.own)}${n.state === 'active' ? timerHtml(n) : ''}</span><span class="tt">${esc(n.title)}</span>` + (n.wt ? `<span class="wt">${esc(n.wt)}</span>` : '')
+      `<span class="own">${n.type === 'automatic' ? CLOCK : '<i></i>'}${esc(n.own)}${n.state === 'active' ? timerHtml(n) : ''}</span><span class="tt">${esc(n.title)}</span>` + (n.wt ? `<span class="wt">${esc(n.wt)}</span>` : '')
     el.title = n.title
     return el
   }

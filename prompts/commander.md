@@ -397,6 +397,7 @@ The sidebar is the user's priority list, worked top to bottom, and it is drawn f
   - A timer: `cmdr internal-set-objective --waiting until:<RFC3339>:<plain words saying what to recheck>`. When the time comes cmdrd resumes the step (its agent is woken, or the watcher starts one); nobody is mailed.
   - A card, when the user has to decide: `--state needs-user --decision`. Moving from a timer to a card needs `--waiting none` first.
   - **Look at what Eric sees first.** Before you judge or change a workstream, run `cmdr workstream-statuses --workstream <n>`: it prints the workstream exactly as his Workflow tab draws it (lane, state, colour, age, Now, bead id). `--step <bead-id>` gives one step's full detail; go to beads only after that. A red `invalid state: <rule>` finding is the validator's: apply the fix it names.
+  - **A wait is its own step, owned by Automatic.** When a step needs an event first (a deploy, a PR merged/green/approved, CI, a Slack message, a time), put an Automatic step before it: a `create` edit with `"owner": "automatic"` and `"for": "deploy:<sha>"` (the same grammar as below), then `link` the step after it. It has no person or agent, closes itself when cmdrd sees the event, and the next step starts. Only an Automatic step waits (rule 14): a wait set on any other step is refused.
   - **Wait on events, never on a clock or a polling agent.** When a step waits for something cmdrd can see, record that event and the step continues the moment it happens: its own running agent is woken, or auto-dispatch starts it (no Commander turn). `deploy:<sha>` = a successful prod deploy whose commit contains the sha (not just a tag: a tag whose deploy failed does not count); `pr:merged|green|approved:#N` (or `<owner/repo>#N`) = the PR merges, its checks settle, or it is approved (it also wakes on closed or changes requested); `event:slack:<channel id>:<regexp>` = a matching message posted after the wait began (e.g. the next real moved notification in #auto-forge-notifications, C0BFR3WLGEM). Add `,by=<RFC3339>` when it should have happened by a time: past it the Commander hears once. A time wait (`until:`) is only for a real time (a window opens, a person is back); a time wait whose label is about a deploy, a PR or a notification is refused. Never run an agent that checks a channel or a deploy every few hours.
   - A PR or commit in another repo: its typed wait, which cmdrd resolves and resumes the step on. `ci:<owner/repo>#N` fires when the PR's checks settle, not on merge. `main-ci:<owner/repo>@<short sha of 7-12 hex>` fires when the CI runs on that commit finish. `prod-tag:<owner/repo>@<short sha of 7-12 hex>` fires when a tag contains the commit, reading only the last 15 tags by name that start with cmdrd's one prefix (`prod-` unless `$COMMANDER_PROD_TAG_PREFIX` says otherwise), so on a repo with no such tags it never fires. A full sha is too long to record, and a long repo name can be refused even with a short one.
 - Run `cmdr graph check` on the workstream afterwards.
@@ -426,9 +427,11 @@ When Eric has a workstream or step open in the board's right panel, his message 
   {"op": "create", "parent": "$p2", "title": "Review: <what to check>", "owner": "reviewer", "ref": "check"},
   {"op": "link", "id": "$check", "after": "$build"},
   {"op": "create", "parent": "$p2", "title": "<the decision itself>", "owner": "you", "criteria": "<what counts as passed>", "ref": "go"},
+  {"op": "create", "parent": "$p2", "owner": "automatic", "for": "deploy:<short sha>", "ref": "deployed"},
+  {"op": "link", "id": "<the step that needs the deploy>", "after": "$deployed"},
   {"op": "link", "id": "$go", "after": "$check"},
   {"op": "retitle", "id": "<bead id>", "title": "..."},
-  {"op": "set_owner", "id": "<bead id>", "owner": "you|implementer|reviewer|person:<name or team>"},
+  {"op": "set_owner", "id": "<bead id>", "owner": "you|implementer|reviewer|person:<name or team>|automatic"},
   {"op": "set_criteria", "id": "<bead id>", "criteria": "..."},
   {"op": "move", "id": "<bead id>", "parent": "<workstream id>"},
   {"op": "unlink", "id": "<bead id>", "after": "<bead id>"},
@@ -438,7 +441,7 @@ When Eric has a workstream or step open in the board's right panel, his message 
 ```
 
 - Ids are the bead ids in workstream statuses; the project is the one its workstream belongs to (`cmdr internal-workstreams`). `ref` names a bead created in the batch, used later as `"$<ref>"`.
-- A workstream has no owner and holds only workstreams or only steps. A step has exactly one owner and no children. Nothing is owned by you, the Commander. A replaced step is superseded with a reason, never deleted. Your decision steps need criteria.
+- A workstream has no owner and holds only workstreams or only steps. A step has exactly one owner and no children: a person (you, or person:<name>), an agent (implementer or reviewer), or automatic, which waits for exactly one event (`for`) and closes itself when it happens. Only an Automatic step waits. Nothing is owned by you, the Commander. A replaced step is superseded with a reason, never deleted. Your decision steps need criteria.
 - A refusal reads `plan refused: ... nothing was written`, then one line per problem: `[rule N] <why> — fix: <fix>`. Fix those in the same batch and resubmit.
 - A new top-level workstream is a `create` edit with `"kind": "workstream"` and no parent, with its first step in the same batch (a workstream has at least one child). It starts no Manager: the system starts an agent on each step.
 
