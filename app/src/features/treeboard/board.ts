@@ -234,8 +234,10 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
 
   // ---------- cards ----------
   function cardEl(n: Node) {
-    const el = document.createElement('button')
-    el.type = 'button'
+    // A div, not a button, so the card's text can be selected and copied; it still opens on click and Enter.
+    const el = document.createElement('div')
+    el.setAttribute('role', 'button')
+    el.tabIndex = 0
     el.dataset.id = n.id
     const live = n.state === 'active' && (n.type === 'agent' || n.type === 'review') && !!n.run
     el.className = `card t-${n.type} s-${n.state}` + (filtersOn() && cardDim(n) ? ' fdim' : '') + (cardHit(n) ? ' hit' : '') + (live ? ' run' : n.asleep ? ' asleep' : '')
@@ -639,6 +641,8 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
   // ---------- events ----------
   const onClick = (e: MouseEvent) => {
     const target = e.target as HTMLElement
+    // Selecting text on a card (to copy it) is not a click.
+    if (window.getSelection()?.toString() && target.closest('.card')) return
     const lin = target.closest<HTMLAnchorElement>('a.lin')
     if (lin) {
       e.preventDefault()
@@ -718,6 +722,12 @@ export function mountBoard(root: HTMLElement, opts: BoardOptions): Board {
     canvasEl.querySelectorAll<SVGGElement>('svg.edges g').forEach((g) => g.classList.toggle('hov', !!id && (g.dataset.a === id || g.dataset.b === id)))
   }
   const onKey = (e: KeyboardEvent) => {
+    const card = (e.target as HTMLElement | null)?.closest?.('.card[role="button"]') as HTMLElement | null
+    if (card && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      card.click()
+      return
+    }
     const a = document.activeElement as HTMLElement | null
     const typing = !!a && (/INPUT|TEXTAREA|SELECT/.test(a.tagName) || a.isContentEditable)
     if (e.key === 'Escape') {

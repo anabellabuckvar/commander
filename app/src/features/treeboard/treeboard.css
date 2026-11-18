@@ -211,7 +211,7 @@
 .tb .c-bad { color: var(--ink); text-decoration: underline dashed; text-underline-offset: 3px }
 
 /* step cards */
-.tb .card { text-align: left; width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: 10px; border: 1.5px solid transparent; cursor: pointer; position: relative; background: var(--done-bg) }
+.tb .card { user-select: text; -webkit-user-select: text; text-align: left; width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px 13px; border-radius: 10px; border: 1.5px solid transparent; cursor: pointer; position: relative; background: var(--done-bg) }
 .tb .own { display: flex; align-items: center; gap: 6px; font: 600 11px/1.2 var(--body) }
 /* how long the current step has been going: changes rarely, and fades when it does */
 .tb .tm { margin-left: auto; padding-left: 8px; flex: none; font-variant-numeric: tabular-nums; transition: opacity .7s ease }
