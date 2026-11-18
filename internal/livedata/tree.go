@@ -254,6 +254,15 @@ func mergeTickets(lists ...[]string) []string {
 // workstreams become rows, the rest become its steps.
 func (b *treeBuild) level(ws SnapWorkstream, steps []SnapStep, row *TreeRow, order []string) []string {
 	k := 0
+	// Sibling workstreams keep the order they were created in (Phase 1, 2, 3, 4), not "soonest to run",
+	// so structured phases read in order. Steps keep their own order.
+	steps = slices.Clone(steps)
+	sort.SliceStable(steps, func(i, j int) bool {
+		if !steps[i].Track || !steps[j].Track {
+			return false
+		}
+		return naturalIDLess(steps[i].BeadID, steps[j].BeadID)
+	})
 	for _, s := range steps {
 		if s.Superseded || s.Withdrawn || s.Task {
 			continue
@@ -986,4 +995,21 @@ func ColumnName(col int) string {
 // TreeBlock is what rides along with a message to the Commander: the tree as text.
 func TreeBlock(t Tree, now int64) string {
 	return fmt.Sprintf("<workstream-statuses version=\"%d\">\n%s\n</workstream-statuses>", t.Version, t.Text(now))
+}
+
+// naturalIDLess orders bead ids by their dotted numeric parts (en1h.9 < en1h.17 < en1h.20).
+func naturalIDLess(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		if pa[i] == pb[i] {
+			continue
+		}
+		na, ea := strconv.Atoi(pa[i])
+		nb, eb := strconv.Atoi(pb[i])
+		if ea == nil && eb == nil {
+			return na < nb
+		}
+		return pa[i] < pb[i]
+	}
+	return len(pa) < len(pb)
 }
